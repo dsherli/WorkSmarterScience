@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assessment - PersonalVTA Learning Platform</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <nav class="navbar">
+            <div class="nav-container">
+                <h1 class="logo">PersonalVTA</h1>
+                <ul class="nav-menu">
+                    <li><a href="index.html" class="nav-link">Home</a></li>
+                    <li><a href="assessment.html" class="nav-link active">Assessment</a></li>
+                </ul>
+            </div>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <section class="assessment-container">
+            <div class="assessment-header">
+                <h2>JavaScript Fundamentals Assessment</h2>
+                <p>Test your knowledge of JavaScript basics. Choose the best answer for each question.</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+                <span class="progress-text">Question 1 of 3</span>
+            </div>
+
+            <form class="assessment-form" id="assessmentForm">
+                <!-- Question 1 -->
+                <div class="question-container active" data-question="1">
+                    <div class="question">
+                        <h3>Question 1</h3>
+                        <p>What is the correct way to declare a variable in JavaScript?</p>
+                    </div>
+                    <div class="answers">
+                        <label class="answer-option">
+                            <input type="radio" name="q1" value="a">
+                            <span class="answer-text">variable myVar = 10;</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q1" value="b">
+                            <span class="answer-text">let myVar = 10;</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q1" value="c">
+                            <span class="answer-text">myVar := 10;</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q1" value="d">
+                            <span class="answer-text">declare myVar = 10;</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question 2 -->
+                <div class="question-container" data-question="2">
+                    <div class="question">
+                        <h3>Question 2</h3>
+                        <p>Which of the following is NOT a JavaScript data type?</p>
+                    </div>
+                    <div class="answers">
+                        <label class="answer-option">
+                            <input type="radio" name="q2" value="a">
+                            <span class="answer-text">String</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q2" value="b">
+                            <span class="answer-text">Boolean</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q2" value="c">
+                            <span class="answer-text">Integer</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q2" value="d">
+                            <span class="answer-text">Object</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question 3 -->
+                <div class="question-container" data-question="3">
+                    <div class="question">
+                        <h3>Question 3</h3>
+                        <p>What does the '===' operator do in JavaScript?</p>
+                    </div>
+                    <div class="answers">
+                        <label class="answer-option">
+                            <input type="radio" name="q3" value="a">
+                            <span class="answer-text">Assigns a value to a variable</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q3" value="b">
+                            <span class="answer-text">Compares values with type coercion</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q3" value="c">
+                            <span class="answer-text">Compares values and types without type coercion</span>
+                        </label>
+                        <label class="answer-option">
+                            <input type="radio" name="q3" value="d">
+                            <span class="answer-text">Performs mathematical addition</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="navigation-buttons">
+                    <button type="button" class="btn btn-secondary" id="prevBtn" onclick="changeQuestion(-1)" disabled>Previous</button>
+                    <button type="button" class="btn btn-primary" id="nextBtn" onclick="changeQuestion(1)">Next</button>
+                    <button type="submit" class="btn btn-success" id="submitBtn" style="display: none;">Submit Assessment</button>
+                </div>
+            </form>
+
+            <div class="results-container" id="resultsContainer" style="display: none;">
+                <h3>Assessment Results</h3>
+                <div class="score-display">
+                    <span class="score-text">Your Score: </span>
+                    <span class="score-value" id="scoreValue">0/3</span>
+                </div>
+                <div class="feedback" id="feedback"></div>
+                <button type="button" class="btn btn-primary" onclick="restartAssessment()">Retake Assessment</button>
+                <a href="index.html" class="btn btn-secondary">Back to Home</a>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 PersonalVTA Learning Platform. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
