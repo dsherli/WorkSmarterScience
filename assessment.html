@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assessment - PersonalVTA Learning Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <header>
         <nav class="navbar">
@@ -20,40 +25,104 @@
     </header>
 
     <main class="main-content">
+        <!-- AI Assistant Sidebar -->
+        <div class="ai-sidebar" id="aiSidebar">
+            <div class="ai-header">
+                <div class="ai-title">
+                    <span class="ai-icon">🤖</span>
+                    <h3>AI Study Assistant</h3>
+                </div>
+                <button class="ai-toggle" id="aiToggle">
+                    <span class="toggle-icon">−</span>
+                </button>
+            </div>
+
+            <div class="ai-content" id="aiContent">
+                <div class="ai-status">
+                    <span class="status-dot"></span>
+                    <span>Ready to help with your assessment</span>
+                </div>
+
+                <div class="quick-hints">
+                    <h4>Quick Hints</h4>
+                    <div class="hint-buttons">
+                        <button class="hint-btn" data-hint="density">Density Concepts</button>
+                        <button class="hint-btn" data-hint="reactions">Chemical Reactions</button>
+                        <button class="hint-btn" data-hint="data">Reading Data Tables</button>
+                    </div>
+                </div>
+
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message ai-message">
+                            <div class="message-content">
+                                <span class="sender">AI Assistant</span>
+                                <p>Hi! I'm here to help you with this assessment. You can ask me questions about
+                                    density, chemical reactions, or how to interpret the data. What would you like to
+                                    know?</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-container">
+                        <input type="text" class="chat-input" id="chatInput"
+                            placeholder="Ask me anything about the assessment...">
+                        <button class="send-btn" id="sendBtn">
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <section class="assessment-container">
             <div class="assessment-header">
-                <h2>JavaScript Fundamentals Assessment</h2>
-                <p>Test your knowledge of JavaScript basics. Choose the best answer for each question.</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 0%"></div>
-                </div>
-                <span class="progress-text">Question 1 of 3</span>
+                <h2>Liquid Density Assessment</h2>
+                <p>Study the images below and answer the questions about liquid density and layering. Provide your
+                    answers in the text boxes.</p>
             </div>
 
             <form class="assessment-form" id="assessmentForm">
+                <!-- Reference Images -->
+                <div class="reference-images">
+                    <!-- Context Text Above First Image -->
+                    <div class="context-text">
+                        <p>Miranda placed two liquids in a test tube. The two liquids were soluble in each other and
+                            mixed together. She then heated the test tube to see if the liquids would react. After
+                            heating the liquids, two separate layers formed - Layer A and Layer B.</p>
+                    </div>
+
+                    <!-- First Image -->
+                    <div class="image-container">
+                        <img src="liquids-and-layers-v01.png" alt="Liquid layers diagram" class="assessment-image">
+                        <p class="image-caption">Figure 1: Different liquid layers based on density</p>
+                    </div>
+
+                    <!-- Context Text Between Images -->
+                    <div class="context-text">
+                        <p>Miranda tested and measured some properties of the liquids and layers and calculated the
+                            density of these substances, recording the data in Table 1.</p>
+                    </div>
+
+                    <!-- Second Image (Table) - Made Larger -->
+                    <div class="image-container table-container">
+                        <img src="mix-two-liquids-layers-table-v04.gif" alt="Data table with liquid properties"
+                            class="assessment-image table-image">
+                        <p class="image-caption">Table 1. Data of sample before and after heating</p>
+                    </div>
+                </div>
+
                 <!-- Question 1 -->
-                <div class="question-container active" data-question="1">
+                <div class="question-container" data-question="1">
                     <div class="question">
                         <h3>Question 1</h3>
-                        <p>What is the correct way to declare a variable in JavaScript?</p>
+                        <p>State whether mixing and then heating Liquid 1 and Liquid 2
+                            caused a chemical reaction to
+                            occur by relating the liquids before heating to the layers after heating.</p>
                     </div>
                     <div class="answers">
-                        <label class="answer-option">
-                            <input type="radio" name="q1" value="a">
-                            <span class="answer-text">variable myVar = 10;</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q1" value="b">
-                            <span class="answer-text">let myVar = 10;</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q1" value="c">
-                            <span class="answer-text">myVar := 10;</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q1" value="d">
-                            <span class="answer-text">declare myVar = 10;</span>
-                        </label>
+                        <textarea name="q1" placeholder="Type your answer here..." class="text-answer"
+                            rows="4"></textarea>
                     </div>
                 </div>
 
@@ -61,25 +130,13 @@
                 <div class="question-container" data-question="2">
                     <div class="question">
                         <h3>Question 2</h3>
-                        <p>Which of the following is NOT a JavaScript data type?</p>
+                        <p>Describe what information from the data table you would use as evidence to support your claim
+                            and explain why you used it.
+                        </p>
                     </div>
                     <div class="answers">
-                        <label class="answer-option">
-                            <input type="radio" name="q2" value="a">
-                            <span class="answer-text">String</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q2" value="b">
-                            <span class="answer-text">Boolean</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q2" value="c">
-                            <span class="answer-text">Integer</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q2" value="d">
-                            <span class="answer-text">Object</span>
-                        </label>
+                        <textarea name="q2" placeholder="Type your answer here..." class="text-answer"
+                            rows="4"></textarea>
                     </div>
                 </div>
 
@@ -87,32 +144,17 @@
                 <div class="question-container" data-question="3">
                     <div class="question">
                         <h3>Question 3</h3>
-                        <p>What does the '===' operator do in JavaScript?</p>
+                        <p>Support your claim with evidence and reasoning using information in the data table.
+                        </p>
                     </div>
                     <div class="answers">
-                        <label class="answer-option">
-                            <input type="radio" name="q3" value="a">
-                            <span class="answer-text">Assigns a value to a variable</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q3" value="b">
-                            <span class="answer-text">Compares values with type coercion</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q3" value="c">
-                            <span class="answer-text">Compares values and types without type coercion</span>
-                        </label>
-                        <label class="answer-option">
-                            <input type="radio" name="q3" value="d">
-                            <span class="answer-text">Performs mathematical addition</span>
-                        </label>
+                        <textarea name="q3" placeholder="Type your answer here..." class="text-answer"
+                            rows="4"></textarea>
                     </div>
                 </div>
 
-                <div class="navigation-buttons">
-                    <button type="button" class="btn btn-secondary" id="prevBtn" onclick="changeQuestion(-1)" disabled>Previous</button>
-                    <button type="button" class="btn btn-primary" id="nextBtn" onclick="changeQuestion(1)">Next</button>
-                    <button type="submit" class="btn btn-success" id="submitBtn" style="display: none;">Submit Assessment</button>
+                <div class="submit-section">
+                    <button type="submit" class="btn btn-success" id="submitBtn">Submit Assessment</button>
                 </div>
             </form>
 
@@ -137,4 +179,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>
