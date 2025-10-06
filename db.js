@@ -1,0 +1,13 @@
+import { Pool } from "pg";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const pool = new Pool({
+  connectionString: process.env.VITE_DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // This is needed for NeonDB SSL connections
+  },
+});
+
+export default pool;
