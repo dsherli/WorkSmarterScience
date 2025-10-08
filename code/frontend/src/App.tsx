@@ -1,7 +1,7 @@
 // App.tsx
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import Login from "./pages/Login";
-// import Register from "./pages/Register";
+import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Protected from "./auth/Protected";
 import "./App.css";
@@ -19,7 +19,7 @@ export default function App() {
 
       <Routes>
         <Route path="/login" element={<Login />} />
-        {/* <Route path="/register" element={<Register />} /> */}
+        <Route path="/register" element={<Register />} />
 
         <Route element={<Protected />}>
           <Route path="/dashboard" element={<Dashboard />} />
