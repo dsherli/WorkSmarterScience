@@ -362,3 +362,33 @@ button:focus-visible {
         background-color: #f9f9f9
     }
 }
+
+/* --- App overrides --- */
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    display: block;
+    /* override previous flex centering */
+    min-height: 100vh;
+    background-color: #252d33;
+    /* deep gray background */
+    color: #e5e7eb;
+    /* gray-200 text */
+}
+
+/* Optional container rhythm */
+.container-px {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+@media (min-width: 1024px) {
+    .container-px {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}

@@ -1,26 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    fetch('/api/auth/user/', { credentials: 'include' })
-      .then((r) => r.json())
+    fetch("/api/auth/user/", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
       .then((data) => setUser(data))
-      .catch(() => setUser(null))
-  }, [])
+      .catch(() => setUser(null));
+  }, []);
 
   return (
-    <div className="max-w-3xl mx-auto mt-12">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      {user ? (
-        <div className="mt-4">
-          <p>Welcome, {user.username}</p>
-          <pre className="mt-2 bg-gray-100 p-2">{JSON.stringify(user, null, 2)}</pre>
-        </div>
-      ) : (
-        <p className="mt-4">Not logged in or loading...</p>
-      )}
+    <div className="mx-auto max-w-3xl">
+      <div className="rounded-2xl border border-gray-800 bg-gray-900/70 p-6 shadow-xl">
+        <h1 className="text-xl font-semibold text-white">Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-400">This is your placeholder dashboard.</p>
+
+        {user ? (
+          <div className="mt-6 grid gap-3">
+            <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-4">
+              <p className="text-sm text-gray-300">Welcome, <span className="font-medium text-white">{user.username}</span></p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-gray-400">Loading user…</p>
+        )}
+      </div>
     </div>
-  )
+  );
 }
