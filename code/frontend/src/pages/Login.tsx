@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export default function Login() {
@@ -13,19 +13,32 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
+      // read csrf token from cookie and include in header
+      const getCookie = (name: string) => {
+        const match = document.cookie.match(new RegExp('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)'))
+        return match ? match.pop() : undefined
+      }
+      const csrftoken = getCookie('csrftoken')
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (csrftoken) headers['X-CSRFToken'] = csrftoken
+
       const res = await fetch('/api/auth/login/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify({ username, password }),
       })
+      if (res.ok) {
+        navigate("/dashboard");
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setError(data.detail || 'Login failed')
         setLoading(false)
         return
       }
-      navigate('/dashboard')
     } catch (err) {
       setError('Network error')
     } finally {
@@ -41,8 +54,13 @@ export default function Login() {
     forest: '#064e3b', // deep forest
   }
 
+  useEffect(() => {
+    // ensure CSRF cookie is set for subsequent POSTs
+    fetch('/api/auth/csrf/', { credentials: 'include' }).catch(() => { })
+  }, [])
+
   return (
-    <div className={`min-h-screen flex items-center justify-center ${colors.slateBg}`}>
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.slateBg }}>
       <div className="w-full max-w-md px-6">
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           <div style={{ backgroundColor: colors.sage }} className="flex items-center gap-3 px-6 py-5">

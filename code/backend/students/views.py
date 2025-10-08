@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -18,7 +19,9 @@ def login_view(request):
     if user is not None:
         login(request, user)
         return Response(UserSerializer(user).data)
-    return Response({"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(
+        {"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
+    )
 
 
 @csrf_exempt
@@ -41,3 +44,11 @@ def current_user(request):
             data["profile"] = None
         return Response(data)
     return Response(None, status=status.HTTP_204_NO_CONTENT)
+
+
+@ensure_csrf_cookie
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_csrf(request):
+    """A small endpoint to set the CSRF cookie for SPA clients."""
+    return Response({"detail": "csrf cookie set"})
