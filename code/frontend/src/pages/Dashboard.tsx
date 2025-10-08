@@ -4,7 +4,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/auth/user/', { credentials: 'include' })
+    fetch('/api/auth/user/', { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => setUser(data))
       .catch(() => setUser(null))
