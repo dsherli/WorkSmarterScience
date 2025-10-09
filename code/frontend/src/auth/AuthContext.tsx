@@ -2,19 +2,30 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 type User = { id: number; username: string } | null;
-type Ctx = { user: User; refresh: () => Promise<void>; logout: () => Promise<void> };
+type Ctx = {
+    user: User;
+    loading: boolean;
+    refresh: () => Promise<void>;
+    logout: () => Promise<void>;
+};
 
-const AuthContext = createContext<Ctx>({ user: null, refresh: async () => { }, logout: async () => { } });
+const AuthContext = createContext<Ctx>({ user: null, loading: true, refresh: async () => { }, logout: async () => { } });
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User>(null);
+    const [loading, setLoading] = useState<boolean>(true);
 
     const refresh = async () => {
+        setLoading(true);
         try {
             const res = await fetch("/api/auth/user/", { credentials: "include" });
             setUser(res.ok ? await res.json() : null);
-        } catch { setUser(null); }
+        } catch {
+            setUser(null);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { refresh(); }, []);
@@ -24,5 +35,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
     };
 
-    return <AuthContext.Provider value={{ user, refresh, logout }}>{children}</AuthContext.Provider>;
+    return <AuthContext.Provider value={{ user, loading, refresh, logout }}>{children}</AuthContext.Provider>;
 }
