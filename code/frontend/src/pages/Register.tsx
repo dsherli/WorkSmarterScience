@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 const GREEN = "#064e3b";
 const AMBER = "#f59e0b";
@@ -11,6 +12,7 @@ export default function Register() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { refresh } = useAuth();
 
     useEffect(() => {
         fetch("/api/auth/csrf/", { credentials: "include" }).catch(() => { });
@@ -37,6 +39,7 @@ export default function Register() {
                 body: JSON.stringify({ username, email, password }),
             });
             if (res.ok) {
+                await refresh();
                 navigate("/dashboard");
             } else {
                 const data = await res.json().catch(() => ({}));

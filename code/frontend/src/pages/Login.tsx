@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Lock, User, ArrowRight } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
 
 const GREEN = "#064e3b";  // dark green
 const AMBER = "#f59e0b";  // amber
@@ -12,6 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const { refresh } = useAuth();
 
   useEffect(() => {
     // ensure CSRF cookie
@@ -39,6 +41,8 @@ export default function Login() {
       });
 
       if (res.ok) {
+        // ensure auth context is populated before hitting Protected route
+        await refresh();
         navigate("/dashboard");
       } else {
         const data = await res.json().catch(() => ({}));
