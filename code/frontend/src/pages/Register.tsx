@@ -39,8 +39,7 @@ export default function Register() {
                 body: JSON.stringify({ username, email, password }),
             });
             if (res.ok) {
-                await refresh();
-                navigate("/dashboard");
+                navigate("/login");
             } else {
                 const data = await res.json().catch(() => ({}));
                 setError(data.detail || "Registration failed");
