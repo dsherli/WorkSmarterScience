@@ -1,3 +1,13 @@
+Frontend (React + Vite)
+
+Quick start
+
+1. Install dependencies: npm install
+2. Start dev server: npm run dev
+
+Notes
+- The frontend expects the backend API at http://127.0.0.1:8000 and uses session credentials (fetch with credentials: 'include').
+- Ensure the Django server is running and CORS_ALLOW_ALL_ORIGINS is enabled for local development.
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

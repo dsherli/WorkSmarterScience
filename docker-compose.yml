@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: worksmarter
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  backend:
+    build:
+      context: ./code/backend
+      dockerfile: Dockerfile
+    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./code/backend:/app
+    ports:
+      - '8000:8000'
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/worksmarter
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./code/frontend
+      dockerfile: Dockerfile
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./code/frontend:/app
+    ports:
+      - '5173:5173'
+    environment:
+      - VITE_API_URL=http://host.docker.internal:8000
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
