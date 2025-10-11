@@ -48,11 +48,16 @@ function Header() {
   );
 }
 
-export default function App() {
+function AppContent() {
+  const { pathname } = useLocation();
+  const isAuthRoute = pathname === "/login" || pathname === "/register";
+
   return (
-    <BrowserRouter>
+    <>
       <Header />
-      <main className="mx-auto max-w-5xl container-px py-10">
+      <main
+        className={`flex-1 ${isAuthRoute ? "w-full px-0" : "mx-auto max-w-5xl container-px"} py-10`}
+      >
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -62,6 +67,14 @@ export default function App() {
           <Route path="*" element={<Login />} />
         </Routes>
       </main>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
     </BrowserRouter>
   );
 }
