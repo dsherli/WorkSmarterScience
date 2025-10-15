@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "students",
+    "activities",
 ]
 
 # Middleware 
@@ -138,7 +139,11 @@ CORS_ALLOW_HEADERS = [
     "authorization",
 ]
 
-#  Optional: show DB info in logs (for debugging) 
+# Media files (user-uploaded content)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# Optional: show DB info in logs (for debugging)
 try:
     db_info = DATABASES["default"]
     print(
@@ -148,4 +153,3 @@ try:
     )
 except Exception as e:
     print(f"[WARN] Could not print DB info: {e}")
-
