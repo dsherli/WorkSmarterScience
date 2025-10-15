@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Assessment1 from "./pages/Assessment1";
 
 // Simple Home to mirror your static look; feel free to replace with your real content
 function Home() {
@@ -15,7 +16,7 @@ function Home() {
           </div>
           <nav className="hidden gap-6 text-sm text-slate-200/90 sm:flex">
             <Link className="hover:text-white" to="/">Home</Link>
-            <a className="hover:text-white" href="/assessment.html">Assessment</a>
+            <Link className="hover:text-white" to="/assessments/1">Assessment</Link>
             <Link className="hover:text-white" to="/dashboard">Dashboard</Link>
           </nav>
         </div>
@@ -42,12 +43,12 @@ function Home() {
               >
                 Create account
               </Link>
-              <a
-                href="/assessment.html"
+              <Link
+                to="/assessments/1"
                 className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 shadow hover:bg-amber-600"
               >
                 Try Assessment
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -80,6 +81,14 @@ export default function App() {
         />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+          path="/assessments/1"
+          element={
+            <RequireAuth>
+              <Assessment1 />
+            </RequireAuth>
+          }
+        />
 
         {/* Keep a tidy fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />

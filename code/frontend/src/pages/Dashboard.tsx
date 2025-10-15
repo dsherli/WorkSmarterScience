@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 function HeaderBar() {
   return (
@@ -9,9 +10,9 @@ function HeaderBar() {
           <span className="font-semibold tracking-tight">PersonalVTA</span>
         </div>
         <nav className="hidden gap-6 text-sm text-slate-200/90 sm:flex">
-          <a className="hover:text-white" href="/">Home</a>
-          <a className="hover:text-white" href="/assessment.html">Assessment</a>
-          <a className="hover:text-white" href="/dashboard">Dashboard</a>
+          <Link className="hover:text-white" to="/">Home</Link>
+          <Link className="hover:text-white" to="/assessments/1">Assessment</Link>
+          <Link className="hover:text-white" to="/dashboard">Dashboard</Link>
         </nav>
       </div>
     </header>
@@ -64,12 +65,12 @@ export default function Dashboard() {
             <p className="mt-2 text-sm text-slate-600">
               Jump back into your latest assessment and pick up where you left off.
             </p>
-            <a
-              href="/assessment.html"
+            <Link
+              to="/assessments/1"
               className="mt-4 inline-block rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:shadow-md"
             >
               Continue
-            </a>
+            </Link>
           </div>
 
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
