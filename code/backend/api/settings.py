@@ -8,6 +8,7 @@ and secure CORS/CSRF setup for frontend (Vite).
 from pathlib import Path
 import os
 from urllib.parse import urlparse
+from datetime import timedelta
 from dotenv import load_dotenv
 
 # Base setup 
@@ -37,6 +38,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "students",
     "activities",
+    "rest_framework_simplejwt",
 ]
 
 # Middleware 
@@ -51,14 +53,27 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# REST Framework 
+# REST Framework (JWT)
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticatedOrReadOnly",
     ],
+}
+
+# SimpleJWT
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
 }
 
 # Templates 
