@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "students",
     "activities",
+    "grading",
 ]
 
 # Middleware 
@@ -142,6 +143,14 @@ CORS_ALLOW_HEADERS = [
 # Media files (user-uploaded content)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# OpenAI / Azure OpenAI Configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
 
 # Optional: show DB info in logs (for debugging)
 try:

@@ -31,6 +31,9 @@ urlpatterns = [
 
     # Science activities routes
     path("api/activities/", include("activities.urls")),
+    
+    # AI grading and feedback routes
+    path("api/grading/", include("grading.urls")),
 ]
 
 # Serve media files (e.g., /media/activities/...) during development

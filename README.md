@@ -32,6 +32,7 @@ This project includes the following key packages and their purposes:
 - **Django 5.2.7** - Core web framework for the API backend
 - **Django REST Framework 3.16.1** - Provides RESTful API functionality and serialization
 - **django-cors-headers 4.9.0** - Enables Cross-Origin Resource Sharing for frontend-backend communication
+- **OpenAI 1.54.3** - AI integration for grading and educational assistance
 - **asgiref 3.10.0** - ASGI reference implementation for async support
 - **sqlparse 0.5.3** - SQL parsing utilities for Django
 
@@ -90,20 +91,32 @@ Follow these steps to set up and run the Virtual Teaching Assistant project:
 
 ## Functionality
 
-**Current Status: Project Foundation Complete**
+**Current Status: Foundation Complete + AI Integration Active**
 
-The project currently provides a solid foundation for the Virtual Teaching Assistant with the following implemented features:
+The project provides a solid foundation with OpenAI-powered features for educational assessment and assistance.
 
 ### Available Now
 - **Backend API Health Check**: `GET /api/health/` returns server status
 - **Django Admin Interface**: Available at `http://localhost:8000/admin/` for database management
 - **React Development Environment**: Hot-reloading frontend with TypeScript and Tailwind CSS
 - **CORS Configuration**: Backend configured to accept requests from frontend development server
+- **🆕 AI-Powered Grading**: Evaluate student work with customizable rubrics via OpenAI/Azure OpenAI
+- **🆕 Educational Feedback**: Generate hints and explanations without giving away answers
+- **🆕 Chat Completions**: Build interactive tutoring experiences
+- **🆕 Usage Tracking**: All AI interactions logged for analytics and audit
 
+### AI Integration Features
+- **Endpoints**: `/api/grading/evaluate/`, `/api/grading/chat/`, `/api/grading/feedback/`
+- **Security**: API keys server-side only, authentication required, CSRF protection
+- **Flexibility**: Supports both standard OpenAI and Azure OpenAI
+- **Monitoring**: Full audit trail with token usage tracking in Django admin
+
+See [OpenAI Integration Guide](docs/OPENAI_INTEGRATION.md) for detailed setup and usage.
 
 ## Known Problems
 
-- **Missing Key Features**: We have not successfully implemented many of the key features of the app including student accounts and view, teacher accounts and dashboard, and AI chatbot functionality. 
+- **Missing Key Features**: Student accounts/views and teacher dashboards need implementation
+- **AI Features**: Integration complete but not yet connected to assessment UI flows 
 
 
 ## Contributing
@@ -120,9 +133,13 @@ TODO: Leave the steps below if you want others to contribute to your project.
 
 [Docs folder](docs)
 
-[Frontend README](code\frontend\README.md)
+**OpenAI Integration:**
+- [OpenAI Integration Guide](docs/OPENAI_INTEGRATION.md) - Complete setup and usage
+- [Integration Summary](docs/OPENAI_SUMMARY.md) - Quick overview of what was added
 
-[Backend Requirements](code/backend/requirements.txt)
+**Project Docs:**
+- [Frontend README](code\frontend\README.md)
+- [Backend Requirements](code/backend/requirements.txt)
 
 ## License
 [View License](LICENSE.txt)
