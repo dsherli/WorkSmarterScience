@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useSubmissionActions } from "../hooks/useRubric";
+import type { AssessmentSubmission } from "../services/rubricService";
 
 export default function Assessment1() {
     const { activity_id } = useParams();
@@ -7,6 +9,9 @@ export default function Assessment1() {
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [grading, setGrading] = useState(false);
+    const [gradingResult, setGradingResult] = useState<AssessmentSubmission | null>(null);
+    const { create: createSubmission, grade: gradeSubmission } = useSubmissionActions();
 
     useEffect(() => {
         if (!activity_id) return;
@@ -38,9 +43,43 @@ export default function Assessment1() {
     const answered = Object.values(answers).filter((v) => v?.trim()).length;
     const progress = Math.round((answered / questions.length) * 100);
 
-    function handleSubmit() {
+    async function handleSubmit() {
+        if (!activity_id) return;
+        
         setSubmitted(true);
-        alert("Responses submitted! (Demo only)");
+        setGrading(true);
+        setGradingResult(null);
+
+        try {
+            // Combine all answers into one text
+            const combinedAnswers = questions
+                .map((q: string, i: number) => {
+                    const answer = answers[i]?.trim();
+                    return answer ? `Question ${i + 1}: ${q}\n\nAnswer: ${answer}` : '';
+                })
+                .filter(Boolean)
+                .join('\n\n---\n\n');
+
+            // Create submission (assumes there's a rubric with ID 1 - adjust as needed)
+            const submission = await createSubmission({
+                activity_id: parseInt(activity_id),
+                rubric: 1, // TODO: Allow selecting rubric or auto-detect from activity
+                question_text: activity.activity_task || questions.join(' '),
+                answer_text: combinedAnswers,
+                status: 'submitted' as const,
+            });
+
+            // Automatically grade with AI
+            if (submission.id) {
+                const gradedSubmission = await gradeSubmission(submission.id);
+                setGradingResult(gradedSubmission);
+            }
+        } catch (error) {
+            console.error('Error submitting/grading:', error);
+            alert('Error submitting assignment. Please try again.');
+        } finally {
+            setGrading(false);
+        }
     }
 
     return (
@@ -131,6 +170,115 @@ export default function Assessment1() {
                         />
                     </section>
                 ))}
+
+                {/* AI Grading Results */}
+                {grading && (
+                    <section className="relative overflow-hidden rounded-2xl border border-blue-200 bg-blue-50/95 p-6 shadow-sm">
+                        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-blue-500 to-blue-600" />
+                        <div className="flex items-center gap-3">
+                            <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
+                            <div>
+                                <h3 className="font-semibold text-blue-900">Grading with AI...</h3>
+                                <p className="text-sm text-blue-700">This may take 10-30 seconds</p>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {gradingResult && (
+                    <section className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50/95 p-6 shadow-lg">
+                        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-emerald-500 to-green-600" />
+                        
+                        {/* Score Header */}
+                        <div className="mb-6">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-2xl font-bold text-emerald-900">
+                                    📊 Grading Results
+                                </h3>
+                                <div className="text-right">
+                                    <div className="text-3xl font-extrabold text-emerald-600">
+                                        {gradingResult.final_score}/{gradingResult.max_score}
+                                    </div>
+                                    <div className="text-sm font-medium text-emerald-700">
+                                        {gradingResult.percentage?.toFixed(1)}%
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Score Progress Bar */}
+                            <div className="mt-4 h-3 w-full rounded-full bg-slate-200">
+                                <div
+                                    className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-green-500 transition-all"
+                                    style={{ width: `${gradingResult.percentage || 0}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Criterion Breakdown */}
+                        {gradingResult.criterion_scores && gradingResult.criterion_scores.length > 0 && (
+                            <div className="mb-6">
+                                <h4 className="mb-3 font-semibold text-slate-900">Detailed Breakdown:</h4>
+                                <div className="space-y-3">
+                                    {gradingResult.criterion_scores.map((score, idx) => {
+                                        const percentage = score.criterion_max_points
+                                            ? (score.points_earned / score.criterion_max_points) * 100
+                                            : 0;
+                                        
+                                        const getScoreColor = (pct: number) => {
+                                            if (pct >= 90) return 'text-green-600';
+                                            if (pct >= 80) return 'text-emerald-600';
+                                            if (pct >= 70) return 'text-yellow-600';
+                                            if (pct >= 60) return 'text-orange-600';
+                                            return 'text-red-600';
+                                        };
+
+                                        return (
+                                            <div
+                                                key={score.id || idx}
+                                                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                                            >
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex-1">
+                                                        <h5 className="font-semibold text-slate-900">
+                                                            {score.criterion_name}
+                                                        </h5>
+                                                        <p className="mt-2 text-sm text-slate-700">
+                                                            {score.feedback}
+                                                        </p>
+                                                    </div>
+                                                    <div className="ml-4 text-right">
+                                                        <div className={`text-lg font-bold ${getScoreColor(percentage)}`}>
+                                                            {score.points_earned}/{score.criterion_max_points}
+                                                        </div>
+                                                        <div className="text-xs text-slate-600">
+                                                            {percentage.toFixed(0)}%
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Overall Feedback */}
+                        {gradingResult.feedback && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                <h4 className="mb-2 font-semibold text-blue-900">Overall Feedback:</h4>
+                                <p className="text-sm text-blue-800">{gradingResult.feedback}</p>
+                            </div>
+                        )}
+
+                        {/* Teacher Feedback (if reviewed) */}
+                        {gradingResult.teacher_feedback && (
+                            <div className="mt-4 rounded-lg border border-purple-200 bg-purple-50 p-4">
+                                <h4 className="mb-2 font-semibold text-purple-900">Teacher Comments:</h4>
+                                <p className="text-sm text-purple-800">{gradingResult.teacher_feedback}</p>
+                            </div>
+                        )}
+                    </section>
+                )}
 
                 {/* Actions */}
                 <div className="flex items-center justify-between">

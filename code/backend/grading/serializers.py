@@ -83,7 +83,7 @@ class AssessmentSubmissionSerializer(serializers.ModelSerializer):
             "final_score", "percentage", "criterion_scores"
         ]
         read_only_fields = [
-            "id", "submitted_at", "graded_at", "graded_by_ai", "ai_model_used",
+            "id", "student", "submitted_at", "graded_at", "graded_by_ai", "ai_model_used",
             "tokens_used", "final_score", "percentage"
         ]
 

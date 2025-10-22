@@ -279,6 +279,10 @@ class AssessmentSubmissionViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    def perform_create(self, serializer):
+        """Set student to current user"""
+        serializer.save(student=self.request.user)
+    
     @action(detail=True, methods=["post"], url_path="grade")
     def grade_submission(self, request, pk=None):
         """
