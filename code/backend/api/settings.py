@@ -143,10 +143,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # CORS & CSRF settings 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite dev server
+    "http://localhost:5173",
+    "http://localhost:5174",# Vite dev server
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:5174",
 ]
 CORS_ALLOW_HEADERS = [
     "content-type",
@@ -168,3 +170,4 @@ try:
     )
 except Exception as e:
     print(f"[WARN] Could not print DB info: {e}")
+
