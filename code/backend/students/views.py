@@ -15,6 +15,7 @@ NO_STORE = {
     "Pragma": "no-cache",
 }
 
+
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -26,8 +27,11 @@ def login_view(request):
         login(request, user)
         return Response(UserSerializer(user).data, headers=NO_STORE)
     return Response(
-        {"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE
+        {"detail": "Invalid credentials"},
+        status=status.HTTP_400_BAD_REQUEST,
+        headers=NO_STORE,
     )
+
 
 @csrf_exempt
 @api_view(["POST"])
@@ -38,6 +42,7 @@ def logout_view(request):
     response.delete_cookie("sessionid")
     response.delete_cookie("csrftoken")
     return response
+
 
 @api_view(["GET"])
 def current_user(request):
@@ -51,7 +56,12 @@ def current_user(request):
         except Exception:
             data["profile"] = None
         return Response(data, headers=NO_STORE)
-    return Response({"detail": "not authenticated"}, status=status.HTTP_401_UNAUTHORIZED, headers=NO_STORE)
+    return Response(
+        {"detail": "not authenticated"},
+        status=status.HTTP_401_UNAUTHORIZED,
+        headers=NO_STORE,
+    )
+
 
 @ensure_csrf_cookie
 @api_view(["GET"])
@@ -59,6 +69,7 @@ def current_user(request):
 def get_csrf(request):
     """A small endpoint to set the CSRF cookie for SPA clients."""
     return Response({"detail": "csrf cookie set"}, headers=NO_STORE)
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -79,7 +90,9 @@ def register_view(request):
 
     if User.objects.filter(username=username).exists():
         return Response(
-            {"detail": "username already taken"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE
+            {"detail": "username already taken"},
+            status=status.HTTP_400_BAD_REQUEST,
+            headers=NO_STORE,
         )
 
     try:
@@ -98,8 +111,10 @@ def register_view(request):
 
         # log the user in so the SPA gets a session cookie immediately
         login(request, user)
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED, headers=NO_STORE)
-    except Exception as e:
+        return Response(
+            UserSerializer(user).data, status=status.HTTP_201_CREATED, headers=NO_STORE
+        )
+    except Exception:
         return Response(
             {"detail": "registration failed"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

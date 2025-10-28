@@ -28,12 +28,12 @@ class ScienceActivityImages(models.Model):
     activity = models.ForeignKey(
         ScienceActivity,
         on_delete=models.CASCADE,
-        db_column='activity_id',
-        related_name='media_files',
+        db_column="activity_id",
+        related_name="media_files",
     )
     file_path = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    media_type = models.CharField(max_length=20, default='image')
+    media_type = models.CharField(max_length=20, default="image")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

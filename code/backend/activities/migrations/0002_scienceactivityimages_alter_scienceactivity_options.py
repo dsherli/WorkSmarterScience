@@ -6,26 +6,26 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('activities', '0001_initial'),
+        ("activities", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ScienceActivityImages',
+            name="ScienceActivityImages",
             fields=[
-                ('id', models.BigAutoField(primary_key=True, serialize=False)),
-                ('file_path', models.CharField(max_length=255)),
-                ('description', models.TextField(blank=True, null=True)),
-                ('media_type', models.CharField(default='image', max_length=20)),
-                ('uploaded_at', models.DateTimeField(auto_now_add=True)),
+                ("id", models.BigAutoField(primary_key=True, serialize=False)),
+                ("file_path", models.CharField(max_length=255)),
+                ("description", models.TextField(blank=True, null=True)),
+                ("media_type", models.CharField(default="image", max_length=20)),
+                ("uploaded_at", models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'db_table': '"public"."science_activity_images"',
-                'managed': False,
+                "db_table": '"public"."science_activity_images"',
+                "managed": False,
             },
         ),
         migrations.AlterModelOptions(
-            name='scienceactivity',
-            options={'managed': False},
+            name="scienceactivity",
+            options={"managed": False},
         ),
     ]

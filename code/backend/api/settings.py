@@ -8,7 +8,6 @@ and secure CORS/CSRF setup for frontend (Vite).
 from pathlib import Path
 import os
 import dj_database_url
-from urllib.parse import urlparse, parse_qs
 from datetime import timedelta
 from dotenv import load_dotenv
 
@@ -109,7 +108,9 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
     DATABASES = {
-        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=True)
+        "default": dj_database_url.parse(
+            DATABASE_URL, conn_max_age=600, ssl_require=True
+        )
     }
 else:
     DATABASES = {

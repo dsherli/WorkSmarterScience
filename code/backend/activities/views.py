@@ -40,12 +40,15 @@ def get_science_activity(request, activity_id):
 
         # 2. search image
         with connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT file_path, description, media_type
                 FROM public.science_activity_images
                 WHERE activity_id = %s
                 ORDER BY id ASC;
-            """, [activity.id])
+            """,
+                [activity.id],
+            )
             media_records = cursor.fetchall()
 
         # 3. JSON
@@ -63,11 +66,13 @@ def get_science_activity(request, activity_id):
                 else:
                     file_url = f"{base_url}/media/{path}"
 
-            media.append({
-                "url": file_url,
-                "description": desc or "",
-                "media_type": mtype or "image",
-            })
+            media.append(
+                {
+                    "url": file_url,
+                    "description": desc or "",
+                    "media_type": mtype or "image",
+                }
+            )
 
         # 4. questions
         questions = [
