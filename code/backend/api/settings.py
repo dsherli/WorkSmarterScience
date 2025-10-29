@@ -97,7 +97,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "api.wsgi.application"
 
 # Database (Neon PostgreSQL or fallback SQLite) 
-database_url = os.getenv("VITE_DATABASE_URL")
+database_url = os.getenv("DATABASE_URL")
 
 if database_url:
     parsed = urlparse(database_url.replace("postgresql://", "postgres://"))

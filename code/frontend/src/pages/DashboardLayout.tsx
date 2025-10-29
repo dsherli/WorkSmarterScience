@@ -14,16 +14,18 @@ import {
     Menu,
     X
 } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
-    userRole: "teacher" | "student";
-    onLogout: () => void;
 }
 
-export function DashboardLayout({ children, userRole, onLogout }: DashboardLayoutProps) {
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [notificationCount] = useState(3);
+    const { user, logout } = useAuth();
+
+    const role = user?.role || "";
 
     const teacherNavItems = [
         { icon: LayoutDashboard, label: "Dashboard", active: true },
@@ -40,10 +42,15 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
         { icon: Settings, label: "Settings", active: false }
     ];
 
-    const navItems = userRole === "teacher" ? teacherNavItems : studentNavItems;
+    const navItems = role === "teacher" ? teacherNavItems : studentNavItems;
+
+    const avatarText = user
+        ? (user.first_name || user.username).slice(0, 2).toUpperCase()
+        : "US";
 
     return (
         <div className="min-h-screen bg-gray-50">
+
             {/* Top Navigation */}
             <nav className="bg-white border-b sticky top-0 z-40">
                 <div className="px-4 sm:px-6 lg:px-8">
@@ -57,6 +64,7 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
                             >
                                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                             </Button>
+
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-lg flex items-center justify-center">
                                     <GraduationCap className="w-5 h-5 text-white" />
@@ -74,17 +82,21 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
                                     </Badge>
                                 )}
                             </Button>
+
                             <div className="flex items-center gap-2">
                                 <Avatar>
-                                    <AvatarFallback>
-                                        {userRole === "teacher" ? "DA" : "AS"}
-                                    </AvatarFallback>
+                                    <AvatarFallback>{avatarText}</AvatarFallback>
                                 </Avatar>
+
                                 <div className="hidden sm:block">
                                     <div className="text-sm">
-                                        {userRole === "teacher" ? "Dr. Anderson" : "Alex Smith"}
+                                        {user?.first_name
+                                            ? `${user.first_name} ${user.last_name || ""}`
+                                            : user?.username}
                                     </div>
-                                    <div className="text-xs text-gray-500 capitalize">{userRole}</div>
+                                    <div className="text-xs text-gray-500 capitalize">
+                                        {role}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -92,11 +104,12 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
                 </div>
             </nav>
 
+            {/* Layout */}
             <div className="flex">
+
                 {/* Sidebar */}
                 <aside
-                    className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
-                        } fixed lg:sticky lg:translate-x-0 top-16 left-0 z-30 w-64 h-[calc(100vh-4rem)] bg-white border-r transition-transform duration-200 ease-in-out`}
+                    className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed lg:sticky lg:translate-x-0 top-16 left-0 z-30 w-64 h-[calc(100vh-4rem)] bg-white border-r transition-transform duration-200 ease-in-out`}
                 >
                     <nav className="p-4 space-y-2">
                         {navItems.map((item, index) => {
@@ -105,8 +118,8 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
                                 <button
                                     key={index}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${item.active
-                                            ? "bg-blue-50 text-blue-600"
-                                            : "hover:bg-gray-50 text-gray-700"
+                                        ? "bg-blue-50 text-blue-600"
+                                        : "hover:bg-gray-50 text-gray-700"
                                         }`}
                                 >
                                     <Icon className="w-5 h-5" />
@@ -120,7 +133,7 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
                         <Button
                             variant="ghost"
                             className="w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={onLogout}
+                            onClick={logout}
                         >
                             <LogOut className="w-5 h-5" />
                             <span>Logout</span>
@@ -128,12 +141,13 @@ export function DashboardLayout({ children, userRole, onLogout }: DashboardLayou
                     </div>
                 </aside>
 
-                {/* Main Content */}
+                {/* Content */}
                 <main className="flex-1 min-h-[calc(100vh-4rem)] lg:ml-0">
                     <div className="max-w-7xl mx-auto">
                         {children}
                     </div>
                 </main>
+
             </div>
 
             {/* Mobile Sidebar Overlay */}
