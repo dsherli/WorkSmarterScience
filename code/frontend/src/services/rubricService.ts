@@ -65,6 +65,13 @@ export interface AssessmentSubmission {
   final_score?: number;
   percentage?: number;
   criterion_scores?: CriterionScore[];
+  // New: level-based grading per question
+  question_levels?: Array<{
+    index: number;
+    question: string;
+    level: 'Beginning' | 'Developing' | 'Proficient';
+    explanation: string;
+  }>;
 }
 
 /**

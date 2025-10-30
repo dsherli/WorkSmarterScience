@@ -60,10 +60,12 @@ export default function Assessment1() {
                 .filter(Boolean)
                 .join('\n\n---\n\n');
 
-            // Create submission (assumes there's a rubric with ID 1 - adjust as needed)
+            // Create submission: pick rubric based on activity
+            // Danny Makes Soap (activity_id '013.03-c02') should use imported rubric ID 6
+            const rubricId = activity_id === '013.03-c02' ? 6 : 1;
             const submission = await createSubmission({
                 activity_id: parseInt(activity_id),
-                rubric: 1, // TODO: Allow selecting rubric or auto-detect from activity
+                rubric: rubricId, // TODO: Allow selecting rubric or auto-detect from activity (server-side mapping)
                 question_text: activity.activity_task || questions.join(' '),
                 answer_text: combinedAnswers,
                 status: 'submitted' as const,
@@ -189,33 +191,64 @@ export default function Assessment1() {
                     <section className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50/95 p-6 shadow-lg">
                         <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-emerald-500 to-green-600" />
                         
-                        {/* Score Header */}
+                        {/* Header */}
                         <div className="mb-6">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-2xl font-bold text-emerald-900">
-                                    📊 Grading Results
+                                    {gradingResult.question_levels?.length ? '� Question Ratings' : '�📊 Grading Results'}
                                 </h3>
-                                <div className="text-right">
-                                    <div className="text-3xl font-extrabold text-emerald-600">
-                                        {gradingResult.final_score}/{gradingResult.max_score}
+                                {!gradingResult.question_levels?.length && (
+                                    <div className="text-right">
+                                        <div className="text-3xl font-extrabold text-emerald-600">
+                                            {gradingResult.final_score}/{gradingResult.max_score}
+                                        </div>
+                                        <div className="text-sm font-medium text-emerald-700">
+                                            {gradingResult.percentage?.toFixed(1)}%
+                                        </div>
                                     </div>
-                                    <div className="text-sm font-medium text-emerald-700">
-                                        {gradingResult.percentage?.toFixed(1)}%
-                                    </div>
+                                )}
+                            </div>
+                            {!gradingResult.question_levels?.length && (
+                                <div className="mt-4 h-3 w-full rounded-full bg-slate-200">
+                                    <div
+                                        className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-green-500 transition-all"
+                                        style={{ width: `${gradingResult.percentage || 0}%` }}
+                                    />
                                 </div>
-                            </div>
-                            
-                            {/* Score Progress Bar */}
-                            <div className="mt-4 h-3 w-full rounded-full bg-slate-200">
-                                <div
-                                    className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-green-500 transition-all"
-                                    style={{ width: `${gradingResult.percentage || 0}%` }}
-                                />
-                            </div>
+                            )}
                         </div>
 
-                        {/* Criterion Breakdown */}
-                        {gradingResult.criterion_scores && gradingResult.criterion_scores.length > 0 && (
+                        {/* Question Level Breakdown */}
+                        {gradingResult.question_levels && gradingResult.question_levels.length > 0 && (
+                            <div className="mb-6">
+                                <div className="space-y-3">
+                                    {gradingResult.question_levels.map((q, idx) => {
+                                        const levelColor = q.level === 'Proficient'
+                                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                            : q.level === 'Developing'
+                                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                            : 'bg-red-100 text-red-800 border-red-200';
+                                        return (
+                                            <div key={idx} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex-1">
+                                                        <h5 className="font-semibold text-slate-900">Question {q.index}</h5>
+                                                        <p className="mt-1 text-sm text-slate-700">{q.question}</p>
+                                                        <p className="mt-2 text-sm text-slate-700">{q.explanation}</p>
+                                                    </div>
+                                                    <span className={`ml-4 inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${levelColor}`}>
+                                                        {q.level}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Criterion Breakdown (legacy) */}
+                        {!gradingResult.question_levels?.length && gradingResult.criterion_scores && gradingResult.criterion_scores.length > 0 && (
                             <div className="mb-6">
                                 <h4 className="mb-3 font-semibold text-slate-900">Detailed Breakdown:</h4>
                                 <div className="space-y-3">

@@ -78,6 +78,33 @@ class AIService:
         if not self.is_configured():
             raise ValueError("AI service not configured. Set OPENAI_API_KEY or Azure credentials.")
         
+        # Always log the outbound prompt/payload to server stdout for troubleshooting
+        # Note: This intentionally avoids logging any API keys; only prompt content and params are printed.
+        try:
+            payload = {
+                "model": self.model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": messages,
+            }
+            if kwargs:
+                payload["extra_params"] = kwargs
+            print("[AIService] Sending chat completion request:")
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        except Exception as log_e:
+            # Fallback if something isn't JSON-serializable
+            print(f"[AIService] Failed to serialize prompt for logging: {log_e}")
+            try:
+                print({
+                    "model": self.model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "messages_count": len(messages) if messages is not None else 0,
+                    "extra_params_keys": list(kwargs.keys()) if kwargs else [],
+                })
+            except Exception:
+                pass
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -119,9 +146,9 @@ class AIService:
             Dict with evaluation results including score, feedback, and reasoning
         """
         
-        system_prompt = """You are an expert educational assessment grader. 
-Provide constructive, specific feedback that helps students learn.
-Be fair, consistent, and encouraging while maintaining high standards."""
+        system_prompt = """You are an educational assessment reviewer. 
+        Provide constructive, specific feedback that helps students learn and improve.
+        Encourage critical thinking, and self-reflection."""
         
         user_message = f"""Grade the following student work:
 
@@ -140,7 +167,7 @@ STUDENT ANSWER:
         user_message += """
 
 Please provide:
-1. A score or grade (if rubric provided, follow it; otherwise use 0-100 scale)
+1. If the student was 
 2. Specific strengths in the answer
 3. Areas for improvement
 4. Constructive feedback for the student
@@ -317,6 +344,104 @@ Provide actionable feedback to help the student improve."""
                 "model_used": response["model"],
                 "tokens_used": response.get("tokens_used"),
                 "error": str(e)
+            }
+
+    def grade_levels_by_question(
+        self,
+        question_text: str,
+        answer_text: str,
+        context: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Classify EACH question/answer pair as Beginning, Developing, or Proficient.
+
+        Inputs are expected to contain multiple questions and answers. The answer_text
+        may include blocks such as:
+            "Question 1: <question>\n\nAnswer: <answer>\n\n---\n\nQuestion 2: ..."
+
+        Returns:
+            {
+              "overall_feedback": str,
+              "questions": [
+                {"index": 1, "question": str, "level": "Beginning|Developing|Proficient", "explanation": str},
+                ...
+              ]
+            }
+        """
+
+        system_prompt = (
+            "You are a middle school teacher and reviewer. For each question/answer pair, classify the student's "
+            "performance into one of three levels: Beginning, Developing, or Proficient. "
+            "Give specific and detailed feedback in explanations to what went well with their response and what went wrong."
+            "If the student is wrong, explain why and what they can do to improve."
+        )
+
+        user_message = (
+            "You will receive multiple questions and the student's answers. "
+            "Extract each question/answer pair and evaluate it individually.\n\n"
+            f"QUESTIONS TEXT:\n{question_text}\n\n"
+            f"ANSWERS TEXT:\n{answer_text}\n\n"
+            "Return STRICT JSON with this exact schema (no code fences):\n"
+            "{\n"
+            "  \"overall_feedback\": string,\n"
+            "  \"questions\": [\n"
+            "    {\n"
+            "      \"index\": number,\n"
+            "      \"question\": string,\n"
+            "      \"level\": \"Beginning\" | \"Developing\" | \"Proficient\",\n"
+            "      \"explanation\": string\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        )
+
+        if context:
+            user_message += f"\n\nADDITIONAL CONTEXT:\n{context}"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+        try:
+            response = self.chat_completion(messages, temperature=0.2, max_tokens=1200)
+            content = response["content"].strip()
+
+            # Remove code fences if any
+            if content.startswith("```"):
+                parts = content.split("```")
+                if len(parts) >= 2:
+                    content = parts[1]
+                    if content.startswith("json"):
+                        content = content[4:].strip()
+
+            data = json.loads(content)
+            # Normalize levels capitalization
+            for q in data.get("questions", []):
+                lvl = str(q.get("level", "")).strip().lower()
+                if lvl.startswith("prof"):
+                    q["level"] = "Proficient"
+                elif lvl.startswith("dev"):
+                    q["level"] = "Developing"
+                else:
+                    q["level"] = "Beginning"
+
+            return {
+                "overall_feedback": data.get("overall_feedback", ""),
+                "questions": data.get("questions", []),
+                "model_used": response.get("model"),
+                "tokens_used": response.get("tokens_used"),
+            }
+
+        except json.JSONDecodeError as e:
+            print(f"[AIService] JSON parsing failed (levels_by_question): {e}")
+            print(f"[AIService] Raw content: {content}")
+            return {
+                "overall_feedback": "",
+                "questions": [],
+                "model_used": response.get("model") if 'response' in locals() else self.model,
+                "tokens_used": response.get("tokens_used") if 'response' in locals() else None,
+                "error": str(e),
             }
 
 

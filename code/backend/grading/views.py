@@ -322,67 +322,63 @@ class AssessmentSubmissionViewSet(viewsets.ModelViewSet):
         submission.save()
         
         try:
-            # Prepare rubric data
-            rubric = submission.rubric
-            rubric_data = {
-                "title": rubric.title,
-                "total_points": rubric.total_points,
-                "criteria": [
-                    {
-                        "name": criterion.name,
-                        "description": criterion.description,
-                        "max_points": criterion.max_points,
-                        "weight": criterion.weight
-                    }
-                    for criterion in rubric.criteria.all()
+            # New default: level-based grading per question
+            request_context = request.data.get("context", "")
+
+            # If a rubric is attached, include a concise rubric summary in the context
+            rubric_summary = ""
+            if submission.rubric:
+                r = submission.rubric
+                rubric_summary_lines = [
+                    f"Rubric: {r.title}",
                 ]
-            }
-            
-            # Grade with AI
-            context = request.data.get("context", "")
-            result = ai_service.grade_with_rubric(
-                question=submission.question_text,
-                student_answer=submission.answer_text,
-                rubric_data=rubric_data,
-                context=context
+                # Add top-level description if present
+                if r.description:
+                    rubric_summary_lines.append(r.description)
+                rubric_summary_lines.append("Criteria (use to inform levels):")
+                for c in r.criteria.all():
+                    rubric_summary_lines.append(f"- {c.name}: {c.description}")
+                rubric_summary = "\n".join(rubric_summary_lines)
+
+            combined_context = request_context
+            if rubric_summary:
+                combined_context = (request_context + "\n\n" if request_context else "") + rubric_summary
+
+            lvl_result = ai_service.grade_levels_by_question(
+                question_text=submission.question_text,
+                answer_text=submission.answer_text,
+                context=combined_context,
             )
-            
-            # Save results
-            submission.score = result["total_score"]
-            submission.max_score = result["max_score"]
-            submission.feedback = result["overall_feedback"]
+
+            # Save minimal results (no points)
+            submission.score = None
+            submission.max_score = None
+            submission.feedback = lvl_result.get("overall_feedback", "")
             submission.status = "graded"
             submission.graded_at = timezone.now()
             submission.graded_by_ai = True
-            submission.ai_model_used = result.get("model_used", "unknown")
-            submission.tokens_used = result.get("tokens_used")
+            submission.ai_model_used = lvl_result.get("model_used", "unknown")
+            submission.tokens_used = lvl_result.get("tokens_used")
             submission.save()
-            
-            # Save criterion scores
-            for criterion_result in result["criterion_results"]:
-                # Find matching criterion
-                criterion = rubric.criteria.filter(name=criterion_result["criterion_name"]).first()
-                if criterion:
-                    CriterionScore.objects.create(
-                        submission=submission,
-                        criterion=criterion,
-                        points_earned=criterion_result["points_earned"],
-                        feedback=criterion_result["feedback"]
-                    )
-            
+
+            # Clear any existing criterion scores since we are not using points here
+            submission.criterion_scores.all().delete()
+
             # Log session
             GradingSession.objects.create(
                 user=request.user,
                 activity_id=submission.activity_id,
-                prompt=f"Rubric: {rubric.title}\nQ: {submission.question_text}\nA: {submission.answer_text}",
-                response=result["overall_feedback"],
-                model_used=result.get("model_used", "unknown"),
-                tokens_used=result.get("tokens_used")
+                prompt=f"Level grading per question\nQ: {submission.question_text}\nA: {submission.answer_text}",
+                response=lvl_result.get("overall_feedback", ""),
+                model_used=lvl_result.get("model_used", "unknown"),
+                tokens_used=lvl_result.get("tokens_used"),
             )
-            
-            # Return updated submission
+
+            # Return submission plus question_levels in payload
             serializer = self.get_serializer(submission)
-            return Response(serializer.data)
+            data = serializer.data
+            data["question_levels"] = lvl_result.get("questions", [])
+            return Response(data)
         
         except Exception as e:
             # Revert status on error
