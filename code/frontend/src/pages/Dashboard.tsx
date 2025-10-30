@@ -7,19 +7,22 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch user and activities concurrently
+        // Fetch user and activities concurrently with JWT Authorization if present
         const fetchData = async () => {
             try {
+                const access = localStorage.getItem("access");
+                const authHeader = access ? { Authorization: `Bearer ${access}` } : {} as Record<string, string>;
+
                 const [userRes, activitiesRes] = await Promise.all([
-                    fetch("/api/auth/user/", { credentials: "include" }),
-                    fetch("/api/activities/"),
+                    fetch("/api/auth/user/", { headers: { ...authHeader, "Cache-Control": "no-store" } }),
+                    fetch("/api/activities/", { headers: { ...authHeader } }),
                 ]);
 
                 const userData = userRes.ok ? await userRes.json() : null;
                 const activityData = activitiesRes.ok ? await activitiesRes.json() : [];
 
                 setUser(userData);
-                setActivities(activityData);
+                setActivities(Array.isArray(activityData) ? activityData : []);
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
             } finally {

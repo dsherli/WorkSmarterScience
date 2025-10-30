@@ -1,0 +1,8 @@
+.git
+.github
+__pycache__
+*.pyc
+*.log
+db.sqlite3
+media
+.DS_Store

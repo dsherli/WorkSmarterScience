@@ -22,7 +22,7 @@ Before installing and running this project, ensure you have the following instal
 - **Python 3.8+** - For the Django backend (check with `python --version`)
 - **Node.js 18+** - For the React frontend (check with `node --version`)
 - **npm or yarn** - Package manager for Node.js (comes with Node.js)
-- **pip** - Python package installer (usually comes with Python) 
+- **pip** - Python package installer (usually comes with Python)
 
 ### Add-ons
 
@@ -85,7 +85,7 @@ Follow these steps to set up and run the Virtual Teaching Assistant project:
 - The backend uses SQLite database by default (no additional setup required)
 - CORS is configured to allow all origins in development (will need to be tightened for production)
 - Both servers need to run simultaneously for full functionality
-- Frontend hot-reloads automatically when you make changes 
+- Frontend hot-reloads automatically when you make changes
 
 
 ## Functionality
@@ -103,7 +103,7 @@ The project currently provides a solid foundation for the Virtual Teaching Assis
 
 ## Known Problems
 
-- **Missing Key Features**: We have not successfully implemented many of the key features of the app including student accounts and view, teacher accounts and dashboard, and AI chatbot functionality. 
+- **Missing Key Features**: We have not successfully implemented many of the key features of the app including student accounts and view, teacher accounts and dashboard, and AI chatbot functionality.
 
 
 ## Contributing
@@ -126,4 +126,3 @@ TODO: Leave the steps below if you want others to contribute to your project.
 
 ## License
 [View License](LICENSE.txt)
-

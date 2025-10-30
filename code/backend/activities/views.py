@@ -12,14 +12,18 @@ def get_science_activities(request):
     Retrieve all science activities.
     This endpoint is used for the dashboard list view.
     """
-    activities = ScienceActivity.objects.all().values(
-        "activity_id",
-        "activity_title",
-        "pe",
-        "lp",
-        "lp_text",
-    )
-    return Response(list(activities))
+    try:
+        activities = ScienceActivity.objects.all().values(
+            "activity_id",
+            "activity_title",
+            "pe",
+            "lp",
+            "lp_text",
+        )
+        return Response(list(activities))
+    except Exception:
+        # If backing table doesn't exist in local dev, return empty list instead of 500
+        return Response([], status=200)
 
 
 @api_view(["GET"])
@@ -36,12 +40,15 @@ def get_science_activity(request, activity_id):
 
         # 2. search image
         with connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT file_path, description, media_type
                 FROM public.science_activity_images
                 WHERE activity_id = %s
                 ORDER BY id ASC;
-            """, [activity.id])
+            """,
+                [activity.id],
+            )
             media_records = cursor.fetchall()
 
         # 3. JSON
@@ -59,11 +66,13 @@ def get_science_activity(request, activity_id):
                 else:
                     file_url = f"{base_url}/media/{path}"
 
-            media.append({
-                "url": file_url,
-                "description": desc or "",
-                "media_type": mtype or "image",
-            })
+            media.append(
+                {
+                    "url": file_url,
+                    "description": desc or "",
+                    "media_type": mtype or "image",
+                }
+            )
 
         # 4. questions
         questions = [

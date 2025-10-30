@@ -7,26 +7,33 @@ and secure CORS/CSRF setup for frontend (Vite).
 
 from pathlib import Path
 import os
-from urllib.parse import urlparse
+import dj_database_url
 from datetime import timedelta
 from dotenv import load_dotenv
 
-# Base setup 
+# Base setup
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env
-load_dotenv(BASE_DIR.parent.parent / ".env")
+# Load environment variables from .env (walk up until we find one)
+for env_candidate in (
+    BASE_DIR / ".env",
+    BASE_DIR.parent / ".env",
+    BASE_DIR.parent.parent / ".env",
+):
+    if env_candidate.exists():
+        load_dotenv(env_candidate)
+        break
 
-# Security 
+# Security
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-va%oc6wg)=%ktza=j^k%2)hd=#af4+-xjjum1)u9^41_^q!fyk",
 )
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "backend"]
 
-# Installed apps 
+# Installed apps
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -41,7 +48,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
 ]
 
-# Middleware 
+# Middleware
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -76,7 +83,7 @@ SIMPLE_JWT = {
     "SIGNING_KEY": SECRET_KEY,
 }
 
-# Templates 
+# Templates
 ROOT_URLCONF = "api.urls"
 
 TEMPLATES = [
@@ -96,21 +103,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "api.wsgi.application"
 
-# Database (Neon PostgreSQL or fallback SQLite) 
-database_url = os.getenv("VITE_DATABASE_URL")
+# Database (Neon PostgreSQL or fallback SQLite)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-if database_url:
-    parsed = urlparse(database_url.replace("postgresql://", "postgres://"))
+if DATABASE_URL:
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": parsed.path.lstrip("/"),
-            "USER": parsed.username,
-            "PASSWORD": parsed.password,
-            "HOST": parsed.hostname,
-            "PORT": parsed.port or "5432",
-            "OPTIONS": {"sslmode": "require"},
-        }
+        "default": dj_database_url.parse(
+            DATABASE_URL, conn_max_age=600, ssl_require=True
+        )
     }
 else:
     DATABASES = {
@@ -120,27 +120,29 @@ else:
         }
     }
 
-# Password validation 
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# Internationalization 
+# Internationalization
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Static files 
+# Static files
 STATIC_URL = "static/"
 
-# Primary key default 
+# Primary key default
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS & CSRF settings 
+# CORS & CSRF settings
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server
