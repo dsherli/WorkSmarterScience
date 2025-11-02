@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "students",
     "activities",
     "rest_framework_simplejwt",
+    'classrooms',
 ]
 
 # Middleware 

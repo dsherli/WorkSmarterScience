@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const refresh = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem("access");
+            const token = localStorage.getItem("access_token");
 
             if (!token) {
                 setUser(null);
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // refresh token > access
     async function refreshAccessToken(): Promise<string | null> {
-        const refresh = localStorage.getItem("refresh");
+        const refresh = localStorage.getItem("refresh_token");
         if (!refresh) return null;
 
         try {
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             const data = await res.json();
             if (res.ok && data.access) {
-                localStorage.setItem("access", data.access);
+                localStorage.setItem("access_token", data.access);
                 return data.access;
             }
             return null;
@@ -105,8 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // logout
     const logout = async () => {
         try {
-            localStorage.removeItem("access");
-            localStorage.removeItem("refresh");
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
             sessionStorage.clear();
             setUser(null);
 

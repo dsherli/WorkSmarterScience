@@ -1,5 +1,5 @@
 ﻿import { useAuth } from "../auth/AuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -36,36 +36,16 @@ import {
 
 const createClassroomSchema = z.object({
     name: z.string().min(1, "Classroom name is required").min(3, "Classroom name must be at least 3 characters"),
-    description: z.string().min(1, "Description is required").min(10, "Description must be at least 10 characters"),
-    gradeLevel: z.string().min(1, "Grade level is required"),
     school: z.string().min(1, "School name is required").min(3, "School name must be at least 3 characters"),
+    gradeLevel: z.string().min(1, "Grade level is required"),
+    description: z.string().optional(),
 });
 
 const editClassroomSchema = z.object({
     name: z.string().min(1, "Classroom name is required").min(3, "Classroom name must be at least 3 characters"),
     status: z.enum(["active", "archived"]),
+    description: z.string().optional(),
 });
-
-const mockClassrooms = [
-    {
-        id: 1,
-        name: "Physics 106 - Period 1",
-        studentCount: 30,
-        activeActivities: 3,
-        color: "from-blue-500 to-blue-600",
-        code: "CS421",
-        status: "active"
-    },
-    {
-        id: 2,
-        name: "Chemistry 201 - Period 3",
-        studentCount: 24,
-        activeActivities: 2,
-        color: "from-purple-500 to-purple-600",
-        code: "mK3pL",
-        status: "archived"
-    }
-];
 
 const mockActivities = [
     {
@@ -119,6 +99,9 @@ const mockRecentFeedback = [
 
 export function TeacherDashboard() {
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState("overview");
+    const [classrooms, setClassrooms] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
     const [isCreateClassroomOpen, setIsCreateClassroomOpen] = useState(false);
     const [selectedClassroomCode, setSelectedClassroomCode] = useState<string | null>(null);
     const [isAddStudentsOpen, setIsAddStudentsOpen] = useState(false);
@@ -127,6 +110,20 @@ export function TeacherDashboard() {
     const [deleteClassroomId, setDeleteClassroomId] = useState<number | null>(null);
     const [editClassroom, setEditClassroom] = useState<any>(null);
     const [isEditClassroomOpen, setIsEditClassroomOpen] = useState(false);
+
+    const colors = [
+        "from-blue-500 to-blue-600",
+        "from-purple-500 to-purple-600",
+        "from-green-500 to-green-600",
+        "from-pink-500 to-pink-600",
+        "from-orange-500 to-yellow-500",
+    ];
+
+    const getRandomColor = (id: number) => colors[id % colors.length];
+
+    const displayName = user?.first_name
+        ? `${user.first_name} ${user.last_name || ""}`
+        : user?.username || "Teacher";
 
     const form = useForm<z.infer<typeof createClassroomSchema>>({
         resolver: zodResolver(createClassroomSchema),
@@ -146,19 +143,159 @@ export function TeacherDashboard() {
         },
     });
 
-    const handleCreateClassroom = (values: z.infer<typeof createClassroomSchema>) => {
-        // Handle classroom creation logic here
-        console.log("Creating classroom:", values);
+    //--------------------------------------------------------- classroom -----------------------------------------------------
 
-        // Show success toast
-        toast.success("Classroom created successfully!", {
-            description: `${values.name} has been added to your classrooms.`,
+    const fetchClassrooms = async () => {
+        const token = localStorage.getItem("access_token");
+        if (!token) return toast.error("Not authenticated");
+
+        try {
+            setIsLoading(true);
+            const res = await fetch("/api/classrooms/", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+
+                const filtered = data
+                    .filter((c) => c.status !== "deleted")
+                    .sort((a, b) => {
+                        const order = { active: 1, archived: 2 };
+                        if (order[a.status] !== order[b.status]) {
+                            return order[a.status] - order[b.status];
+                        }
+                        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+                    });
+
+                setClassrooms(filtered);
+            } else {
+                toast.error("Failed to fetch classrooms");
+            }
+        } catch {
+            toast.error("Network error while loading classrooms");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchClassrooms();
+    }, []);
+
+    const handleCreateClassroom = async (values) => {
+        const token = localStorage.getItem("access_token");
+
+        const payload = JSON.stringify({
+            name: values.name,
+            grade_level: values.gradeLevel,
+            school: values.school,
+            description: values.description || ""
         });
 
-        // Reset form and close modal
-        form.reset();
-        setIsCreateClassroomOpen(false);
+        const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+        };
+
+        try {
+            const response = await fetch("/api/classrooms/", {
+                method: "POST",
+                headers,
+                body: payload,
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (response.ok) {
+                toast.success("Classroom created successfully!");
+
+                form.reset();
+                setIsCreateClassroomOpen(false);
+                await fetchClassrooms();
+
+                setActiveTab("classrooms");
+            } else {
+                toast.error(`Failed: ${data?.detail || response.status}`);
+            }
+        } catch (error) {
+            toast.error("Network error");
+        }
     };
+
+    const openEditClassroom = (classroom: any) => {
+        setEditClassroom(classroom);
+        editForm.reset({
+            name: classroom.name,
+            status: classroom.status || "active",
+            description: classroom.description || "",
+        });
+        setIsEditClassroomOpen(true);
+    };
+
+    const handleEditClassroom = async (values: z.infer<typeof editClassroomSchema>) => {
+        if (!editClassroom) return;
+        const token = localStorage.getItem("access_token");
+        if (!token) return toast.error("Not authenticated");
+
+        try {
+            const response = await fetch(`/api/classrooms/${editClassroom.id}/`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    name: values.name,
+                    status: values.status,
+                    description: values.description || "",
+                }),
+            });
+
+            if (response.ok) {
+                toast.success("Classroom updated successfully!");
+                setIsEditClassroomOpen(false);
+                setEditClassroom(null);
+                editForm.reset();
+                fetchClassrooms();
+            } else {
+                const data = await response.json();
+                toast.error(data?.detail || "Failed to update classroom");
+            }
+        } catch {
+            toast.error("Network error while updating classroom");
+        }
+    };
+
+    const handleDeleteClassroom = async () => {
+        if (!deleteClassroomId) return;
+        const token = localStorage.getItem("access_token");
+        if (!token) return toast.error("Not authenticated");
+
+        try {
+            const response = await fetch(`/api/classrooms/${deleteClassroomId}/`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ status: "deleted" }),
+            });
+
+            if (response.ok) {
+                toast.success("Classroom deleted");
+                setClassrooms(prev => prev.filter(c => c.id !== deleteClassroomId));
+                setDeleteClassroomId(null);
+            } else {
+                const data = await response.json();
+                toast.error(data?.detail || "Failed to delete classroom");
+            }
+        } catch {
+            toast.error("Network error while deleting classroom");
+        }
+    };
+
+    //--------------------------------------------------------- student -----------------------------------------------------
 
     const handleAddStudent = (e: React.FormEvent) => {
         e.preventDefault();
@@ -173,40 +310,6 @@ export function TeacherDashboard() {
 
     const handleRemoveStudent = (email: string) => {
         setAddedStudents(addedStudents.filter(s => s !== email));
-    };
-
-    const handleDeleteClassroom = () => {
-        if (deleteClassroomId) {
-            toast.success("Classroom deleted successfully!", {
-                description: "The classroom has been removed from your list.",
-            });
-            setDeleteClassroomId(null);
-        }
-    };
-
-    const handleEditClassroom = (values: z.infer<typeof editClassroomSchema>) => {
-        console.log("Editing classroom:", values);
-
-        toast.success("Classroom updated successfully!", {
-            description: `${values.name} has been updated.`,
-        });
-
-        editForm.reset();
-        setIsEditClassroomOpen(false);
-        setEditClassroom(null);
-    };
-
-    const displayName = user?.first_name
-        ? `${user.first_name} ${user.last_name || ""}`
-        : user?.username || "Teacher";
-
-    const openEditClassroom = (classroom: any) => {
-        setEditClassroom(classroom);
-        editForm.reset({
-            name: classroom.name,
-            status: classroom.status,
-        });
-        setIsEditClassroomOpen(true);
     };
 
     return (
@@ -250,7 +353,7 @@ export function TeacherDashboard() {
             </div>
 
             {/* Main Content */}
-            <Tabs defaultValue="overview" className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="classrooms">Classrooms</TabsTrigger>
@@ -333,66 +436,79 @@ export function TeacherDashboard() {
                 {/* Classrooms */}
                 <TabsContent value="classrooms">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {mockClassrooms.map((classroom) => (
-                            <Card key={classroom.id} className="p-6 hover:shadow-lg transition-shadow">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="flex items-center gap-3 flex-1">
-                                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${classroom.color} flex items-center justify-center text-white`}>
-                                            <BookOpen className="w-6 h-6" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h3 className="text-lg">{classroom.name}</h3>
-                                                <Badge
-                                                    variant={classroom.status === "active" ? "default" : "secondary"}
-                                                    className={
-                                                        classroom.status === "active"
-                                                            ? "bg-teal-500 text-white"
-                                                            : "bg-gray-200 text-gray-600"
-                                                    }
-                                                >
-                                                    {classroom.status === "active" ? "Active" : "Archived"}
-                                                </Badge>
+                        {classrooms.length === 0 ? (
+                            <p className="text-gray-500 text-sm">No classrooms found.</p>
+                        ) : (
+                            classrooms.map((classroom) => (
+                                <Card key={classroom.id} className="p-6 hover:shadow-lg transition-shadow">
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${getRandomColor(classroom.id)} flex items-center justify-center text-white`}>
+                                                <BookOpen className="w-6 h-6" />
                                             </div>
-                                            <p className="text-sm text-gray-500">{classroom.studentCount} students • {classroom.activeActivities} active activities</p>
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h3 className="text-lg">{classroom.name}</h3>
+                                                    <Badge
+                                                        variant={classroom.status === "active" ? "default" : "secondary"}
+                                                        className={
+                                                            classroom.status === "active"
+                                                                ? "bg-teal-500 text-white"
+                                                                : "bg-gray-200 text-gray-600"
+                                                        }
+                                                    >
+                                                        {classroom.status === "active" ? "Active" : "Archived"}
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-sm text-gray-500">
+                                                    {classroom.school} • {classroom.grade_level}
+                                                </p>
+                                                {classroom.description && (
+                                                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                                        {classroom.description}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
+
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button size="sm" variant="ghost">
+                                                    <MoreVertical className="w-4 h-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="bg-white">
+                                                <DropdownMenuItem
+                                                    className="cursor-pointer"
+                                                    onSelect={() => openEditClassroom(classroom)}
+                                                >
+                                                    <Pencil className="w-4 h-4 mr-2" />
+                                                    Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    className="text-red-600 focus:text-red-600 cursor-pointer"
+                                                    onSelect={() => setDeleteClassroomId(classroom.id)}
+                                                >
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button size="sm" variant="ghost">
-                                                <MoreVertical className="w-4 h-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="bg-white">
-                                            <DropdownMenuItem
-                                                className="cursor-pointer"
-                                                onSelect={() => openEditClassroom(classroom)}
-                                            >
-                                                <Pencil className="w-4 h-4 mr-2" />
-                                                Edit
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                className="text-red-600 focus:text-red-600 cursor-pointer"
-                                                onSelect={() => setDeleteClassroomId(classroom.id)}
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-2" />
-                                                Delete
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button size="sm" className="flex-1">View Classroom</Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setSelectedClassroomCode(classroom.code)}
-                                    >
-                                        Code
-                                    </Button>
-                                </div>
-                            </Card>
-                        ))}
+
+                                    <div className="flex gap-2">
+                                        <Button size="sm" className="flex-1">View Classroom</Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setSelectedClassroomCode(classroom.code)}
+                                        >
+                                            Code
+                                        </Button>
+                                    </div>
+                                </Card>
+                            ))
+                        )}
                     </div>
                 </TabsContent>
 
@@ -677,7 +793,7 @@ export function TeacherDashboard() {
                     <DialogHeader>
                         <DialogTitle>Edit Classroom</DialogTitle>
                         <DialogDescription>
-                            Update the classroom name and status
+                            Update the classroom details
                         </DialogDescription>
                     </DialogHeader>
                     <Form {...editForm}>
@@ -705,7 +821,7 @@ export function TeacherDashboard() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Status</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value} >
+                                        <Select onValueChange={field.onChange} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger className="bg-white">
                                                     <SelectValue placeholder="Select status" />
@@ -716,6 +832,24 @@ export function TeacherDashboard() {
                                                 <SelectItem value="archived">Archived</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={editForm.control}
+                                name="description"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Description</FormLabel>
+                                        <FormControl>
+                                            <Textarea
+                                                placeholder="Enter classroom description"
+                                                rows={4}
+                                                {...field}
+                                            />
+                                        </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -741,6 +875,7 @@ export function TeacherDashboard() {
                     </Form>
                 </DialogContent>
             </Dialog>
+
 
             {/* Delete Classroom Confirmation */}
             <AlertDialog open={deleteClassroomId !== null} onOpenChange={(open) => !open && setDeleteClassroomId(null)}>

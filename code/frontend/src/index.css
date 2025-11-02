@@ -832,7 +832,7 @@ video {
 }
 
 .mb-4 {
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .mb-6 {
@@ -880,7 +880,7 @@ video {
 }
 
 .mt-4 {
-  margin-top: 1rem;
+  margin-top: 0;
 }
 
 .mt-6 {
@@ -2010,7 +2010,6 @@ video {
 
 .from-orange-500 {
   --tw-gradient-from: #f97316 var(--tw-gradient-from-position);
-  --tw-gradient-to: rgb(249 115 22 / 0) var(--tw-gradient-to-position);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
