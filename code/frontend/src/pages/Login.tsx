@@ -49,28 +49,6 @@ export default function Login() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-blue-50 flex items-center justify-center px-6 py-12">
             <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,640px)_1fr] gap-8 items-center">
-                {/* Left Side - Branding */}
-                <div className="hidden lg:block lg:col-start-1">
-                    <div className="flex items-center gap-3 mb-8">
-                        <div className="w-12 h-12 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-xl flex items-center justify-center">
-                            <GraduationCap className="w-7 h-7 text-white" />
-                        </div>
-                        <span className="text-2xl">ScienceHub</span>
-                    </div>
-
-                    <h1 className="text-4xl mb-4">Welcome Back to ScienceHub</h1>
-                    <p className="text-xl text-gray-600 mb-8">
-                        Sign in to continue your learning journey with AI-powered tools.
-                    </p>
-
-                    <div className="flex items-center gap-3">
-                        <Sparkles className="w-5 h-5 text-teal-600" />
-                        <p className="text-sm text-gray-600">
-                            Continue exploring and collaborating in your courses.
-                        </p>
-                    </div>
-                </div>
-
                 {/* Center - Form */}
                 <section className="w-full max-w-lg mx-auto lg:col-start-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                     {/* Header */}

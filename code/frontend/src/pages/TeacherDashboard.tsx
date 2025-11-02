@@ -1,49 +1,69 @@
-import { useAuth } from "../auth/AuthContext";
+﻿import { useAuth } from "../auth/AuthContext";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
+import { toast } from "sonner";
+
 import {
     BookOpen,
     Users,
+    Activity,
     Plus,
     MoreVertical,
     Clock,
     CheckCircle2,
     AlertCircle,
     TrendingUp,
-    MessageSquare
+    MessageSquare,
+    X,
+    Pencil,
+    Trash2,
 } from "lucide-react";
+
+const createClassroomSchema = z.object({
+    name: z.string().min(1, "Classroom name is required").min(3, "Classroom name must be at least 3 characters"),
+    description: z.string().min(1, "Description is required").min(10, "Description must be at least 10 characters"),
+    gradeLevel: z.string().min(1, "Grade level is required"),
+    school: z.string().min(1, "School name is required").min(3, "School name must be at least 3 characters"),
+});
+
+const editClassroomSchema = z.object({
+    name: z.string().min(1, "Classroom name is required").min(3, "Classroom name must be at least 3 characters"),
+    status: z.enum(["active", "archived"]),
+});
 
 const mockClassrooms = [
     {
         id: 1,
-        name: "Biology 101 - Period 1",
-        studentCount: 28,
+        name: "Physics 106 - Period 1",
+        studentCount: 30,
         activeActivities: 3,
-        color: "from-blue-500 to-blue-600"
+        color: "from-blue-500 to-blue-600",
+        code: "CS421",
+        status: "active"
     },
     {
         id: 2,
         name: "Chemistry 201 - Period 3",
         studentCount: 24,
         activeActivities: 2,
-        color: "from-purple-500 to-purple-600"
-    },
-    {
-        id: 3,
-        name: "Physics 301 - Period 5",
-        studentCount: 22,
-        activeActivities: 4,
-        color: "from-green-500 to-green-600"
-    },
-    {
-        id: 4,
-        name: "Earth Science - Period 7",
-        studentCount: 26,
-        activeActivities: 1,
-        color: "from-orange-500 to-orange-600"
+        color: "from-purple-500 to-purple-600",
+        code: "mK3pL",
+        status: "archived"
     }
 ];
 
@@ -56,7 +76,7 @@ const mockActivities = [
         total: 28,
         needsReview: 5,
         dueDate: "Today, 3:00 PM",
-        status: "active"
+        status: "open"
     },
     {
         id: 2,
@@ -66,7 +86,7 @@ const mockActivities = [
         total: 28,
         needsReview: 12,
         dueDate: "Tomorrow",
-        status: "active"
+        status: "open"
     },
     {
         id: 3,
@@ -76,18 +96,8 @@ const mockActivities = [
         total: 24,
         needsReview: 0,
         dueDate: "Yesterday",
-        status: "completed"
+        status: "closed"
     },
-    {
-        id: 4,
-        title: "Newton Laws Discussion",
-        classroom: "Physics 301",
-        submitted: 15,
-        total: 22,
-        needsReview: 8,
-        dueDate: "In 2 days",
-        status: "active"
-    }
 ];
 
 const mockRecentFeedback = [
@@ -105,21 +115,99 @@ const mockRecentFeedback = [
         aiScore: 92,
         status: "pending"
     },
-    {
-        id: 3,
-        student: "Olivia Brown",
-        activity: "Chemical Reactions",
-        aiScore: 78,
-        status: "reviewed"
-    }
 ];
 
 export function TeacherDashboard() {
     const { user } = useAuth();
+    const [isCreateClassroomOpen, setIsCreateClassroomOpen] = useState(false);
+    const [selectedClassroomCode, setSelectedClassroomCode] = useState<string | null>(null);
+    const [isAddStudentsOpen, setIsAddStudentsOpen] = useState(false);
+    const [studentEmail, setStudentEmail] = useState("");
+    const [addedStudents, setAddedStudents] = useState<string[]>([]);
+    const [deleteClassroomId, setDeleteClassroomId] = useState<number | null>(null);
+    const [editClassroom, setEditClassroom] = useState<any>(null);
+    const [isEditClassroomOpen, setIsEditClassroomOpen] = useState(false);
+
+    const form = useForm<z.infer<typeof createClassroomSchema>>({
+        resolver: zodResolver(createClassroomSchema),
+        defaultValues: {
+            name: "",
+            description: "",
+            gradeLevel: "",
+            school: "",
+        },
+    });
+
+    const editForm = useForm<z.infer<typeof editClassroomSchema>>({
+        resolver: zodResolver(editClassroomSchema),
+        defaultValues: {
+            name: "",
+            status: "active",
+        },
+    });
+
+    const handleCreateClassroom = (values: z.infer<typeof createClassroomSchema>) => {
+        // Handle classroom creation logic here
+        console.log("Creating classroom:", values);
+
+        // Show success toast
+        toast.success("Classroom created successfully!", {
+            description: `${values.name} has been added to your classrooms.`,
+        });
+
+        // Reset form and close modal
+        form.reset();
+        setIsCreateClassroomOpen(false);
+    };
+
+    const handleAddStudent = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (studentEmail && studentEmail.includes('@')) {
+            setAddedStudents([...addedStudents, studentEmail]);
+            setStudentEmail("");
+            toast.success("Student added!", {
+                description: `${studentEmail} has been added to the list.`,
+            });
+        }
+    };
+
+    const handleRemoveStudent = (email: string) => {
+        setAddedStudents(addedStudents.filter(s => s !== email));
+    };
+
+    const handleDeleteClassroom = () => {
+        if (deleteClassroomId) {
+            toast.success("Classroom deleted successfully!", {
+                description: "The classroom has been removed from your list.",
+            });
+            setDeleteClassroomId(null);
+        }
+    };
+
+    const handleEditClassroom = (values: z.infer<typeof editClassroomSchema>) => {
+        console.log("Editing classroom:", values);
+
+        toast.success("Classroom updated successfully!", {
+            description: `${values.name} has been updated.`,
+        });
+
+        editForm.reset();
+        setIsEditClassroomOpen(false);
+        setEditClassroom(null);
+    };
 
     const displayName = user?.first_name
         ? `${user.first_name} ${user.last_name || ""}`
         : user?.username || "Teacher";
+
+    const openEditClassroom = (classroom: any) => {
+        setEditClassroom(classroom);
+        editForm.reset({
+            name: classroom.name,
+            status: classroom.status,
+        });
+        setIsEditClassroomOpen(true);
+    };
 
     return (
         <div className="p-6 space-y-6">
@@ -189,7 +277,7 @@ export function TeacherDashboard() {
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-xl">Pending Reviews</h2>
-                                <Badge variant="secondary">{mockRecentFeedback.filter(f => f.status === "pending").length}</Badge>
+                                <Button size="sm" variant="ghost">View All</Button>
                             </div>
                             <div className="space-y-3">
                                 {mockRecentFeedback.map((item) => (
@@ -204,10 +292,9 @@ export function TeacherDashboard() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Badge variant={item.status === "pending" ? "default" : "secondary"}>
-                                                AI {item.aiScore} percent
-                                            </Badge>
-                                            <Button size="sm" variant="outline">Review</Button>
+                                            <Button size="sm" variant="outline" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                                                Review
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}
@@ -219,11 +306,19 @@ export function TeacherDashboard() {
                     <Card className="p-6">
                         <h2 className="text-xl mb-4">Quick Actions</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <Button className="h-auto py-4 flex flex-col gap-2" variant="outline">
+                            <Button
+                                className="h-auto py-4 flex flex-col gap-2"
+                                variant="outline"
+                                onClick={() => setIsCreateClassroomOpen(true)}
+                            >
                                 <Plus className="w-5 h-5" />
                                 Create Classroom
                             </Button>
-                            <Button className="h-auto py-4 flex flex-col gap-2" variant="outline">
+                            <Button
+                                className="h-auto py-4 flex flex-col gap-2"
+                                variant="outline"
+                                onClick={() => setIsAddStudentsOpen(true)}
+                            >
                                 <Users className="w-5 h-5" />
                                 Add Students
                             </Button>
@@ -241,27 +336,60 @@ export function TeacherDashboard() {
                         {mockClassrooms.map((classroom) => (
                             <Card key={classroom.id} className="p-6 hover:shadow-lg transition-shadow">
                                 <div className="flex items-start justify-between mb-4">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 flex-1">
                                         <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${classroom.color} flex items-center justify-center text-white`}>
                                             <BookOpen className="w-6 h-6" />
                                         </div>
-                                        <div>
-                                            <h3 className="text-lg">{classroom.name}</h3>
-                                            <p className="text-sm text-gray-500">{classroom.studentCount} students</p>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h3 className="text-lg">{classroom.name}</h3>
+                                                <Badge
+                                                    variant={classroom.status === "active" ? "default" : "secondary"}
+                                                    className={
+                                                        classroom.status === "active"
+                                                            ? "bg-teal-500 text-white"
+                                                            : "bg-gray-200 text-gray-600"
+                                                    }
+                                                >
+                                                    {classroom.status === "active" ? "Active" : "Archived"}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-gray-500">{classroom.studentCount} students • {classroom.activeActivities} active activities</p>
                                         </div>
                                     </div>
-                                    <Button size="sm" variant="ghost">
-                                        <MoreVertical className="w-4 h-4" />
-                                    </Button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button size="sm" variant="ghost">
+                                                <MoreVertical className="w-4 h-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="bg-white">
+                                            <DropdownMenuItem
+                                                className="cursor-pointer"
+                                                onSelect={() => openEditClassroom(classroom)}
+                                            >
+                                                <Pencil className="w-4 h-4 mr-2" />
+                                                Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                className="text-red-600 focus:text-red-600 cursor-pointer"
+                                                onSelect={() => setDeleteClassroomId(classroom.id)}
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Badge variant="secondary">
-                                        {classroom.activeActivities} active activities
-                                    </Badge>
-                                </div>
-                                <div className="mt-4 flex gap-2">
                                     <Button size="sm" className="flex-1">View Classroom</Button>
-                                    <Button size="sm" variant="outline">Manage</Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setSelectedClassroomCode(classroom.code)}
+                                    >
+                                        Code
+                                    </Button>
                                 </div>
                             </Card>
                         ))}
@@ -277,7 +405,7 @@ export function TeacherDashboard() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
                                             <h3 className="text-lg">{activity.title}</h3>
-                                            <Badge variant={activity.status === "completed" ? "secondary" : "default"}>
+                                            <Badge variant={activity.status === "closed" ? "destructive" : "default"}>
                                                 {activity.status}
                                             </Badge>
                                         </div>
@@ -290,16 +418,6 @@ export function TeacherDashboard() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-6">
-                                        <div className="text-center">
-                                            <div className="text-2xl">{activity.submitted}/{activity.total}</div>
-                                            <div className="text-sm text-gray-500">Submitted</div>
-                                        </div>
-                                        {activity.needsReview > 0 && (
-                                            <Badge variant="destructive" className="gap-1">
-                                                <AlertCircle className="w-4 h-4" />
-                                                {activity.needsReview} to review
-                                            </Badge>
-                                        )}
                                         <Button>View Details</Button>
                                     </div>
                                 </div>
@@ -321,7 +439,9 @@ export function TeacherDashboard() {
                                             <p className="text-sm text-gray-600">{activity.classroom}</p>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <Badge>{activity.needsReview} pending reviews</Badge>
+                                            <Badge variant="destructive" className="text-xs">
+                                                {activity.needsReview} pending reviews
+                                            </Badge>
                                             <Button>Review Feedback</Button>
                                         </div>
                                     </div>
@@ -331,9 +451,321 @@ export function TeacherDashboard() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Create Classroom Modal */}
+            <Dialog open={isCreateClassroomOpen} onOpenChange={setIsCreateClassroomOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Create New Classroom</DialogTitle>
+                        <DialogDescription>
+                            Add a new classroom to organize your students and activities.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(handleCreateClassroom)} className="space-y-4 py-4">
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Classroom Name</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="e.g., Biology 101 - Period 1" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="school"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>School</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="e.g., Lincoln High School" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="gradeLevel"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Grade Level</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-white">
+                                                    <SelectValue placeholder="Select grade level" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-white">
+                                                {["Elementary", "Middle", "High"].map((grade) => (
+                                                    <SelectItem key={grade} value={grade.toLowerCase()}>
+                                                        {grade} School
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="description"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Description</FormLabel>
+                                        <FormControl>
+                                            <Textarea
+                                                placeholder="Enter a brief description of this classroom..."
+                                                rows={4}
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline" className="bg-white"
+                                    onClick={() => {
+                                        form.reset();
+                                        setIsCreateClassroomOpen(false);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button type="submit">
+                                    Create Classroom
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Classroom Code Modal */}
+            <Dialog open={!!selectedClassroomCode} onOpenChange={() => setSelectedClassroomCode(null)}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle>Classroom Code</DialogTitle>
+                        <DialogDescription>
+                            Share this code with students to join the classroom
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-8">
+                        <div className="text-center">
+                            <div className="inline-block bg-gradient-to-br from-teal-500 to-cyan-600 text-white px-8 py-6 rounded-2xl shadow-lg">
+                                <p className="text-sm mb-2 opacity-90">Join Code</p>
+                                <p className="text-5xl tracking-wider font-mono">{selectedClassroomCode}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline" className="bg-white w-full"
+                            onClick={() => setSelectedClassroomCode(null)}
+                        >
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add Students Modal */}
+            <Dialog open={isAddStudentsOpen} onOpenChange={setIsAddStudentsOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Add Students</DialogTitle>
+                        <DialogDescription>
+                            Enter student email addresses to add them to your classroom
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <form onSubmit={handleAddStudent} className="flex gap-2">
+                            <Input
+                                type="email"
+                                placeholder="student@example.com"
+                                value={studentEmail}
+                                onChange={(e) => setStudentEmail(e.target.value)}
+                                className="flex-1"
+                            />
+                            <Button type="submit">Add</Button>
+                        </form>
+
+                        {addedStudents.length > 0 && (
+                            <div className="space-y-2">
+                                <Label>Added Students ({addedStudents.length})</Label>
+                                <div className="border rounded-lg max-h-64 overflow-y-auto">
+                                    {addedStudents.map((email, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between p-3 hover:bg-gray-50 border-b last:border-b-0"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="w-8 h-8">
+                                                    <AvatarFallback className="bg-gradient-to-br from-teal-500 to-cyan-600 text-white text-xs">
+                                                        {email.charAt(0).toUpperCase()}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <span className="text-sm">{email}</span>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => handleRemoveStudent(email)}
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {addedStudents.length === 0 && (
+                            <div className="text-center py-8 text-gray-500 text-sm">
+                                No students added yet. Enter an email above to get started.
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline" className="bg-white"
+                            onClick={() => {
+                                setIsAddStudentsOpen(false);
+                                setAddedStudents([]);
+                                setStudentEmail("");
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (addedStudents.length > 0) {
+                                    toast.success("Students added successfully!", {
+                                        description: `${addedStudents.length} student(s) have been added.`,
+                                    });
+                                    setIsAddStudentsOpen(false);
+                                    setAddedStudents([]);
+                                    setStudentEmail("");
+                                }
+                            }}
+                            disabled={addedStudents.length === 0}
+                        >
+                            Done
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Classroom Modal */}
+            <Dialog open={isEditClassroomOpen} onOpenChange={setIsEditClassroomOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Edit Classroom</DialogTitle>
+                        <DialogDescription>
+                            Update the classroom name and status
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...editForm}>
+                        <form onSubmit={editForm.handleSubmit(handleEditClassroom)} className="space-y-4">
+                            <FormField
+                                control={editForm.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Classroom Name</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                placeholder="e.g., Biology 101 - Period 1"
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={editForm.control}
+                                name="status"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Status</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} >
+                                            <FormControl>
+                                                <SelectTrigger className="bg-white">
+                                                    <SelectValue placeholder="Select status" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-white">
+                                                <SelectItem value="active">Active</SelectItem>
+                                                <SelectItem value="archived">Archived</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        editForm.reset();
+                                        setIsEditClassroomOpen(false);
+                                        setEditClassroom(null);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button type="submit">
+                                    Save Changes
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Classroom Confirmation */}
+            <AlertDialog open={deleteClassroomId !== null} onOpenChange={(open) => !open && setDeleteClassroomId(null)}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure you want to delete this classroom?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the classroom and remove all associated data.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteClassroom}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
+
 
 interface StatCardProps {
     icon: React.ReactNode;
@@ -377,7 +809,7 @@ function ActivityItem({ activity }: ActivityItemProps) {
                         </Badge>
                     )}
                 </div>
-                <div className="text-sm text-gray-500">{activity.classroom} Due {activity.dueDate}</div>
+                <div className="text-sm text-gray-500">{activity.classroom} • Due {activity.dueDate}</div>
             </div>
             <div className="text-sm text-gray-600">
                 {activity.submitted}/{activity.total}
@@ -385,5 +817,6 @@ function ActivityItem({ activity }: ActivityItemProps) {
         </div>
     );
 }
+
 
 export default TeacherDashboard;

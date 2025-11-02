@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 *, ::before, ::after {
   --tw-border-spacing-x: 0;
   --tw-border-spacing-y: 0;
@@ -1290,7 +1294,7 @@ video {
 }
 
 .max-w-\[calc\(100\%-2rem\)\] {
-  max-width: calc(100% - 2rem);
+  max-width: 500px;
 }
 
 .max-w-lg {
