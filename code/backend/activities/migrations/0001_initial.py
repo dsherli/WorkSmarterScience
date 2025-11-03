@@ -7,27 +7,37 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='ScienceActivity',
+            name="ScienceActivity",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('activity_id', models.CharField(max_length=50)),
-                ('pe', models.CharField(max_length=50)),
-                ('lp', models.CharField(max_length=50)),
-                ('lp_text', models.TextField()),
-                ('activity_title', models.CharField(max_length=255)),
-                ('activity_task', models.TextField(blank=True, null=True)),
-                ('activity_image', models.CharField(blank=True, max_length=255, null=True)),
-                ('image_description', models.TextField(blank=True, null=True)),
-                ('question_1', models.TextField(blank=True, null=True)),
-                ('question_2', models.TextField(blank=True, null=True)),
-                ('question_3', models.TextField(blank=True, null=True)),
-                ('question_4', models.TextField(blank=True, null=True)),
-                ('question_5', models.TextField(blank=True, null=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("activity_id", models.CharField(max_length=50)),
+                ("pe", models.CharField(max_length=50)),
+                ("lp", models.CharField(max_length=50)),
+                ("lp_text", models.TextField()),
+                ("activity_title", models.CharField(max_length=255)),
+                ("activity_task", models.TextField(blank=True, null=True)),
+                (
+                    "activity_image",
+                    models.CharField(blank=True, max_length=255, null=True),
+                ),
+                ("image_description", models.TextField(blank=True, null=True)),
+                ("question_1", models.TextField(blank=True, null=True)),
+                ("question_2", models.TextField(blank=True, null=True)),
+                ("question_3", models.TextField(blank=True, null=True)),
+                ("question_4", models.TextField(blank=True, null=True)),
+                ("question_5", models.TextField(blank=True, null=True)),
             ],
         ),
     ]
