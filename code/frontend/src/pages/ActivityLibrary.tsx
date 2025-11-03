@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -20,6 +21,21 @@ import {
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 import { Plus, Atom, Sprout, Earth, Wrench } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
+
+type ActivitySummary = {
+    activity_id: string;
+    activity_title: string | null;
+    pe: string | null;
+    lp: string | null;
+    lp_text: string | null;
+};
+
+type ActivityDetail = ActivitySummary & {
+    activity_task?: string | null;
+    media?: { url: string; description: string; media_type: string }[];
+    questions?: string[];
+};
 
 // Mock classrooms
 const mockClassrooms = [
@@ -30,14 +46,18 @@ const mockClassrooms = [
 ];
 
 export default function ActivityDashboard() {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const role = (user?.role || "").toLowerCase();
+    const isTeacher = role === "teacher";
     const [loading, setLoading] = useState(true);
-    const [activities, setActivities] = useState<any[]>([]);
-    const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
+    const [activities, setActivities] = useState<ActivitySummary[]>([]);
+    const [selectedActivity, setSelectedActivity] = useState<ActivitySummary | null>(null);
     const [selectedClassroom, setSelectedClassroom] = useState<string>("");
     const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
 
     // preview
-    const [previewActivity, setPreviewActivity] = useState<any | null>(null);
+    const [previewActivity, setPreviewActivity] = useState<ActivityDetail | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
 
     useEffect(() => {
@@ -46,7 +66,26 @@ export default function ActivityDashboard() {
                 const res = await fetch("/api/activities/");
                 if (!res.ok) throw new Error("Failed to fetch activities");
                 const data = await res.json();
-                setActivities(data);
+                if (Array.isArray(data)) {
+                    const mapped = data
+                        .map(
+                            (item: any): ActivitySummary => ({
+                                activity_id:
+                                    typeof item.activity_id === "string" ? item.activity_id : "",
+                                activity_title:
+                                    typeof item.activity_title === "string"
+                                        ? item.activity_title
+                                        : null,
+                                pe: typeof item.pe === "string" ? item.pe : null,
+                                lp: typeof item.lp === "string" ? item.lp : null,
+                                lp_text: typeof item.lp_text === "string" ? item.lp_text : null,
+                            }),
+                        )
+                        .filter((item) => item.activity_id !== "");
+                    setActivities(mapped);
+                } else {
+                    setActivities([]);
+                }
             } catch (err) {
                 console.error("Error fetching activities:", err);
                 toast.error("Failed to load activities");
@@ -58,6 +97,17 @@ export default function ActivityDashboard() {
     }, []);
 
     const handleAddToClassroom = () => {
+        if (!isTeacher) {
+            setSelectedActivity(null);
+            setSelectedClassroom("");
+            return;
+        }
+
+        if (!selectedActivity) {
+            toast.error("No activity selected");
+            return;
+        }
+
         if (!selectedClassroom) {
             toast.error("Please select a classroom");
             return;
@@ -78,13 +128,17 @@ export default function ActivityDashboard() {
         setSelectedFilter(selectedFilter === filter ? null : filter);
     };
 
-    const handlePreview = async (activityId: number) => {
+    const handlePreview = async (activity: ActivitySummary) => {
+        setPreviewActivity(activity);
         setPreviewLoading(true);
         try {
-            const res = await fetch(`/api/activities/${activityId}/`);
+            const res = await fetch(`/api/activities/${activity.activity_id}/`);
             if (!res.ok) throw new Error("Failed to fetch activity preview");
             const data = await res.json();
-            setPreviewActivity(data);
+            setPreviewActivity((prev) => ({
+                ...(prev ?? activity),
+                ...data,
+            }));
         } catch (err) {
             console.error("Error loading preview:", err);
             toast.error("Failed to load preview");
@@ -104,7 +158,9 @@ export default function ActivityDashboard() {
                 <div>
                     <h1 className="text-3xl mb-2">Science Activities</h1>
                     <p className="text-gray-600">
-                        Browse and assign activities to your classrooms
+                        {isTeacher
+                            ? "Browse and assign activities to your classrooms"
+                            : "Browse activities and jump into your assignments"}
                     </p>
                 </div>
                 <Button
@@ -278,22 +334,30 @@ export default function ActivityDashboard() {
                                         size="sm"
                                         variant="outline"
                                         className="flex-1"
-                                        onClick={() =>
-                                            handlePreview(activity.activity_id)
-                                        }
+                                        onClick={() => handlePreview(activity)}
                                     >
                                         Preview
                                     </Button>
-                                    <Button
-                                        size="sm"
-                                        className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
-                                        onClick={() =>
-                                            setSelectedActivity(activity)
-                                        }
-                                    >
-                                        <Plus className="w-3 h-3 mr-1" />
-                                        Add
-                                    </Button>
+                                    {isTeacher ? (
+                                        <Button
+                                            size="sm"
+                                            className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
+                                            onClick={() => setSelectedActivity(activity)}
+                                        >
+                                            <Plus className="w-3 h-3 mr-1" />
+                                            Add
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+                                            asChild
+                                        >
+                                            <Link to={`/assessment/${activity.activity_id}`}>
+                                                Start
+                                            </Link>
+                                        </Button>
+                                    )}
                                 </div>
                             </Card>
                         ))}
@@ -302,66 +366,82 @@ export default function ActivityDashboard() {
             </div>
 
             {/* Add to Classroom Modal */}
-            <Dialog
-                open={!!selectedActivity}
-                onOpenChange={() => setSelectedActivity(null)}
-            >
-                <DialogContent className="sm:max-w-[500px]">
-                    <DialogHeader>
-                        <DialogTitle>Add Activity to Classroom</DialogTitle>
-                        <DialogDescription>
-                            Select a classroom to assign this activity to
-                        </DialogDescription>
-                    </DialogHeader>
+            {isTeacher && (
+                <Dialog
+                    open={!!selectedActivity}
+                    onOpenChange={() => setSelectedActivity(null)}
+                >
+                    <DialogContent className="sm:max-w-[500px] bg-white">
+                        <DialogHeader>
+                            <DialogTitle>Add Activity to Classroom</DialogTitle>
+                            <DialogDescription>
+                                Select a classroom to assign this activity to
+                            </DialogDescription>
+                        </DialogHeader>
 
-                    <div className="py-4 space-y-4">
-                        <div className="space-y-2">
-                            <Select
-                                value={selectedClassroom}
-                                onValueChange={setSelectedClassroom}
-                            >
-                                <SelectTrigger
-                                    id="classroom"
-                                    className="bg-white"
+                        <div className="py-4 space-y-4">
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="classroom"
+                                    className="text-sm font-medium text-gray-700"
                                 >
-                                    <SelectValue placeholder="Choose a classroom" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-white">
-                                    {mockClassrooms.map((classroom) => (
-                                        <SelectItem
-                                            key={classroom.id}
-                                            value={classroom.id.toString()}
-                                        >
-                                            {classroom.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                    Classroom
+                                </Label>
+                                <Select
+                                    value={selectedClassroom}
+                                    onValueChange={setSelectedClassroom}
+                                >
+                                    <SelectTrigger
+                                        id="classroom"
+                                        className="bg-white"
+                                    >
+                                        <SelectValue placeholder="Choose a classroom" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-white">
+                                        {mockClassrooms.map((classroom) => (
+                                            <SelectItem
+                                                key={classroom.id}
+                                                value={classroom.id.toString()}
+                                            >
+                                                {classroom.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
-                    </div>
 
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setSelectedActivity(null);
-                                setSelectedClassroom("");
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleAddToClassroom}
-                            className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
-                        >
-                            Add to Classroom
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setSelectedActivity(null);
+                                    setSelectedClassroom("");
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleAddToClassroom}
+                                className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
+                            >
+                                Add to Classroom
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* Preview Modal */}
-            <Dialog open={!!previewActivity} onOpenChange={() => setPreviewActivity(null)}>
+            <Dialog
+                open={!!previewActivity}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPreviewLoading(false);
+                        setPreviewActivity(null);
+                    }
+                }}
+            >
                 <DialogContent className="sm:max-w-3xl max-w-[95vw] max-h-[90vh] overflow-y-auto bg-white">
                     <DialogHeader className="border-b border-slate-200 pb-4 mb-6">
                         <DialogTitle className="text-2xl font-semibold text-slate-900">
@@ -393,32 +473,35 @@ export default function ActivityDashboard() {
                                         Reference Media
                                     </h2>
                                     <div className="mt-4 grid grid-cols-1 gap-6">
-                                        {previewActivity.media.map((item: any, idx: number) => (
-                                            <figure
-                                                key={idx}
-                                                className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                                            >
-                                                {item.media_type === "image" ? (
-                                                    <img
-                                                        src={item.url}
-                                                        alt={item.description || `reference ${idx + 1}`}
-                                                        className="w-full h-auto object-contain"
-                                                    />
-                                                ) : (
-                                                    <video
-                                                        controls
-                                                        className="block w-full rounded-lg object-contain"
-                                                    >
-                                                        <source src={item.url} type="video/mp4" />
-                                                    </video>
-                                                )}
-                                                {item.description && (
-                                                    <figcaption className="p-3 text-sm text-slate-600 bg-slate-50 border-t border-slate-100">
-                                                        {item.description}
-                                                    </figcaption>
-                                                )}
-                                            </figure>
-                                        ))}
+                                        {previewActivity.media.map((item: any, idx: number) => {
+                                            const mediaUrl = resolveMediaUrl(item.url);
+                                            return (
+                                                <figure
+                                                    key={idx}
+                                                    className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                                                >
+                                                    {item.media_type === "image" ? (
+                                                        <img
+                                                            src={mediaUrl}
+                                                            alt={item.description || `reference ${idx + 1}`}
+                                                            className="w-full h-auto object-contain"
+                                                        />
+                                                    ) : (
+                                                        <video
+                                                            controls
+                                                            className="block w-full rounded-lg object-contain"
+                                                        >
+                                                            <source src={mediaUrl} type="video/mp4" />
+                                                        </video>
+                                                    )}
+                                                    {item.description && (
+                                                        <figcaption className="p-3 text-sm text-slate-600 bg-slate-50 border-t border-slate-100">
+                                                            {item.description}
+                                                        </figcaption>
+                                                    )}
+                                                </figure>
+                                            );
+                                        })}
                                     </div>
                                 </section>
                             )}
@@ -442,7 +525,7 @@ export default function ActivityDashboard() {
                             )}
 
                             {/* Footer */}
-                            <div className="flex justify-end pt-4 border-t border-slate-200">
+                            <div className="flex flex-col gap-3 pt-4 border-t border-slate-200 sm:flex-row sm:items-center sm:justify-between">
                                 <Button
                                     variant="outline"
                                     className="hover:bg-slate-100"
@@ -450,6 +533,19 @@ export default function ActivityDashboard() {
                                 >
                                     Close Preview
                                 </Button>
+                                {!isTeacher && (
+                                    <Button
+                                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+                                        onClick={() => {
+                                            if (!previewActivity?.activity_id) return;
+                                            const targetId = previewActivity.activity_id;
+                                            setPreviewActivity(null);
+                                            navigate(`/assessment/${targetId}`);
+                                        }}
+                                    >
+                                        Start Activity
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     ) : (

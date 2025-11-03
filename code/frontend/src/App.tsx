@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import ActivityLibrary from "./pages/ActivityLibrary";
 import { Toaster } from "./components/ui/sonner";
+import Assessment1 from "./pages/Assessment1";
 
 export default function App() {
     return (
@@ -29,6 +30,7 @@ export default function App() {
                         {/* <Route path="students" element={<StudentsPage />} /> */}
                         {/* <Route path="ai-insights" element={<AIInsightsPage />} /> */}
                     </Route>
+                    <Route path="/assessment/:activity_id" element={<Assessment1 />} />
                 </Route>
             </Routes>
 

@@ -1,8 +1,12 @@
+from urllib.parse import urljoin
+
+from django.conf import settings
+from django.db import connection
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
 from .models import ScienceActivity
-from django.db import connection
 
 
 @api_view(["GET"])
@@ -36,35 +40,66 @@ def get_science_activity(request, activity_id):
     try:
         # 1. load activity
         activity = ScienceActivity.objects.get(activity_id=activity_id)
-        base_url = request.build_absolute_uri("/").rstrip("/")
-
         # 2. search image
+        media_records = []
+        query = """
+            SELECT file_path, description, media_type
+            FROM public.science_activity_images
+            WHERE activity_id = %s
+            ORDER BY id ASC;
+        """
+        identifiers = [activity.activity_id, activity.id]
+
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT file_path, description, media_type
-                FROM public.science_activity_images
-                WHERE activity_id = %s
-                ORDER BY id ASC;
-            """,
-                [activity.id],
-            )
-            media_records = cursor.fetchall()
+            for identifier in identifiers:
+                try:
+                    cursor.execute(query, [identifier])
+                    media_records = cursor.fetchall()
+                except Exception:
+                    media_records = []
+
+                if media_records:
+                    break
 
         # 3. JSON
         media = []
+
+        def _normalise_media_path(raw_path: str) -> str:
+            clean = (raw_path or "").strip()
+            if not clean:
+                return ""
+
+            clean = clean.replace("\\", "/").lstrip("/")
+            if "media/" in clean:
+                clean = clean.split("media/", 1)[1]
+            if clean.startswith("backend/"):
+                remainder = clean[len("backend/") :]
+                if remainder.startswith("media/"):
+                    clean = remainder[len("media/") :]
+                else:
+                    clean = remainder
+            return clean
+
+        public_media_base = getattr(settings, "PUBLIC_MEDIA_BASE_URL", "").strip()
+        if public_media_base:
+            media_base_url = public_media_base.rstrip("/") + "/"
+        else:
+            media_base_url = request.build_absolute_uri(settings.MEDIA_URL)
+            media_base_url = (
+                media_base_url if media_base_url.endswith("/") else f"{media_base_url}/"
+            )
+
         for path, desc, mtype in media_records:
             if not path:
                 continue
 
-            # route
             if path.startswith("http"):
                 file_url = path
             else:
-                if path.startswith("media/"):
-                    file_url = f"{base_url}/{path}"
-                else:
-                    file_url = f"{base_url}/media/{path}"
+                normalised_path = _normalise_media_path(path)
+                if not normalised_path:
+                    continue
+                file_url = urljoin(media_base_url, normalised_path)
 
             media.append(
                 {

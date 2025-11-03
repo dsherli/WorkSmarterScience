@@ -7,6 +7,7 @@ and secure CORS/CSRF setup for frontend (Vite).
 
 from pathlib import Path
 import os
+
 import dj_database_url
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -173,3 +174,6 @@ try:
     )
 except Exception as e:
     print(f"[WARN] Could not print DB info: {e}")
+
+# Public media base (used when the app needs to build absolute media URLs)
+PUBLIC_MEDIA_BASE_URL = (os.getenv("PUBLIC_MEDIA_BASE_URL") or "").strip()

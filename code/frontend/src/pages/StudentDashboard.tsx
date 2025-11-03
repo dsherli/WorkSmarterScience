@@ -1,8 +1,9 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Progress } from "../components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
@@ -11,7 +12,6 @@ import {
     CheckCircle2,
     MessageSquare,
     Award,
-    TrendingUp,
     Calendar,
     Bot
 } from "lucide-react";
@@ -43,46 +43,13 @@ const mockClasses = [
     }
 ];
 
-const mockAssignments = [
-    {
-        id: 1,
-        title: "Cell Structure and Function Quiz",
-        class: "Biology 101",
-        dueDate: "Today, 3:00 PM",
-        status: "in-progress",
-        progress: 60,
-        aiHelp: 3
-    },
-    {
-        id: 2,
-        title: "Photosynthesis Lab Report",
-        class: "Biology 101",
-        dueDate: "Tomorrow",
-        status: "not-started",
-        progress: 0,
-        aiHelp: 0
-    },
-    {
-        id: 3,
-        title: "Chemical Reactions Worksheet",
-        class: "Chemistry 201",
-        dueDate: "In 3 days",
-        status: "not-started",
-        progress: 0,
-        aiHelp: 0
-    },
-    {
-        id: 4,
-        title: "Newton Laws Discussion",
-        class: "Physics 301",
-        dueDate: "In 2 days",
-        status: "completed",
-        progress: 100,
-        aiHelp: 5,
-        grade: 92,
-        feedback: "pending"
-    }
-];
+type Assignment = {
+    activity_id: string;
+    activity_title: string | null;
+    pe: string | null;
+    lp: string | null;
+    lp_text: string | null;
+};
 
 const mockRecentActivity = [
     {
@@ -113,6 +80,87 @@ const mockRecentActivity = [
 
 export function StudentDashboard() {
     const { user } = useAuth();
+    const [assignments, setAssignments] = useState<Assignment[]>([]);
+    const [loadingAssignments, setLoadingAssignments] = useState<boolean>(true);
+    const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const controller = new AbortController();
+
+        const loadAssignments = async () => {
+            setLoadingAssignments(true);
+            setAssignmentsError(null);
+
+            try {
+                const response = await fetch("/api/activities/", {
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    const normalised = data
+                        .map((item: any): Assignment => ({
+                            activity_id:
+                                typeof item.activity_id === "string" ? item.activity_id : "",
+                            activity_title:
+                                typeof item.activity_title === "string"
+                                    ? item.activity_title
+                                    : null,
+                            pe: typeof item.pe === "string" ? item.pe : null,
+                            lp: typeof item.lp === "string" ? item.lp : null,
+                            lp_text: typeof item.lp_text === "string" ? item.lp_text : null,
+                        }))
+                        .filter((item) => item.activity_id !== "");
+
+                    setAssignments(normalised);
+                } else {
+                    setAssignments([]);
+                }
+            } catch (error) {
+                if (controller.signal.aborted) return;
+                console.error("Failed to load assignments", error);
+                setAssignments([]);
+                setAssignmentsError("We couldn't load your assignments. Please try again.");
+            } finally {
+                if (!controller.signal.aborted) {
+                    setLoadingAssignments(false);
+                }
+            }
+        };
+
+        loadAssignments();
+
+        return () => {
+            controller.abort();
+        };
+    }, []);
+
+    const upcomingAssignments = assignments.slice(0, 3);
+    const uniquePeCount = useMemo(() => {
+        const set = new Set<string>();
+        assignments.forEach((assignment) => {
+            if (assignment.pe) {
+                set.add(assignment.pe);
+            }
+        });
+        return set.size;
+    }, [assignments]);
+    const assignmentsWithLpCount = useMemo(
+        () => assignments.filter((assignment) => Boolean(assignment.lp)).length,
+        [assignments],
+    );
+
+    const assignmentSummary = (() => {
+        if (loadingAssignments) return "Loading your assignments...";
+        if (assignmentsError) return assignmentsError;
+        if (assignments.length === 0) return "No assignments are currently available.";
+        if (assignments.length === 1) return "You have 1 assignment ready to explore.";
+        return `You have ${assignments.length} assignments ready to explore.`;
+    })();
 
     const displayName = user?.first_name
         ? `${user.first_name} ${user.last_name || ""}`
@@ -123,7 +171,7 @@ export function StudentDashboard() {
             {/* Header */}
             <div>
                 <h1 className="text-3xl mb-2">Welcome back, {displayName}</h1>
-                <p className="text-gray-600">You have 2 assignments due today</p>
+                <p className="text-gray-600">{assignmentSummary}</p>
             </div>
 
             {/* Stats Overview */}
@@ -131,25 +179,25 @@ export function StudentDashboard() {
                 <StatCard
                     icon={<BookOpen className="w-5 h-5" />}
                     label="Active Classes"
-                    value="3"
+                    value={String(mockClasses.length)}
                     color="bg-blue-500"
                 />
                 <StatCard
                     icon={<Clock className="w-5 h-5" />}
-                    label="Pending Tasks"
-                    value="3"
+                    label="Assignments Available"
+                    value={loadingAssignments ? "..." : String(assignments.length)}
                     color="bg-orange-500"
                 />
                 <StatCard
                     icon={<CheckCircle2 className="w-5 h-5" />}
-                    label="Completed"
-                    value="12"
+                    label="Unique PEs"
+                    value={loadingAssignments ? "..." : String(uniquePeCount)}
                     color="bg-green-500"
                 />
                 <StatCard
                     icon={<Award className="w-5 h-5" />}
-                    label="Avg Grade"
-                    value="88 percent"
+                    label="With Learning Plans"
+                    value={loadingAssignments ? "..." : String(assignmentsWithLpCount)}
                     color="bg-purple-500"
                 />
             </div>
@@ -170,40 +218,60 @@ export function StudentDashboard() {
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-xl">Upcoming Assignments</h2>
-                                <Button size="sm" variant="ghost">View All</Button>
+                                <Button size="sm" variant="ghost" asChild>
+                                    <Link to="/dashboard/activity-library">View All</Link>
+                                </Button>
                             </div>
                             <div className="space-y-3">
-                                {mockAssignments.filter(a => a.status !== "completed").slice(0, 3).map((assignment) => (
-                                    <div key={assignment.id} className="p-3 border rounded-lg hover:border-blue-500 transition-colors">
-                                        <div className="flex items-start justify-between mb-2">
-                                            <div className="flex-1">
-                                                <h3 className="mb-1">{assignment.title}</h3>
-                                                <p className="text-sm text-gray-500">{assignment.class}</p>
-                                            </div>
-                                            <Badge variant={assignment.status === "in-progress" ? "default" : "secondary"}>
-                                                {assignment.status === "in-progress" ? "In Progress" : "Not Started"}
-                                            </Badge>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                                            <Clock className="w-4 h-4" />
-                                            Due {assignment.dueDate}
-                                        </div>
-                                        {assignment.progress > 0 && (
-                                            <div className="space-y-1">
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-gray-600">Progress</span>
-                                                    <span>{assignment.progress} percent</span>
+                                {loadingAssignments && (
+                                    <p className="text-sm text-gray-500">Loading assignments...</p>
+                                )}
+                                {!loadingAssignments && assignmentsError && (
+                                    <p className="text-sm text-red-600">{assignmentsError}</p>
+                                )}
+                                {!loadingAssignments &&
+                                    !assignmentsError &&
+                                    upcomingAssignments.length === 0 && (
+                                        <p className="text-sm text-gray-500">
+                                            No assignments are available right now.
+                                        </p>
+                                    )}
+                                {!loadingAssignments &&
+                                    !assignmentsError &&
+                                    upcomingAssignments.map((assignment) => (
+                                        <div
+                                            key={assignment.activity_id}
+                                            className="p-3 border rounded-lg hover:border-blue-500 transition-colors"
+                                        >
+                                            <div className="flex items-start justify-between mb-2 gap-3">
+                                                <div className="flex-1">
+                                                    <h3 className="mb-1">
+                                                        {assignment.activity_title || "Untitled Activity"}
+                                                    </h3>
+                                                    <p className="text-sm text-gray-500">
+                                                        {assignment.pe
+                                                            ? `PE: ${assignment.pe}`
+                                                            : "Performance expectation coming soon"}
+                                                    </p>
                                                 </div>
-                                                <Progress value={assignment.progress} />
+                                                {assignment.lp && (
+                                                    <Badge variant="secondary">LP {assignment.lp}</Badge>
+                                                )}
                                             </div>
-                                        )}
-                                        <div className="mt-2">
-                                            <Button size="sm" className="w-full">
-                                                {assignment.status === "in-progress" ? "Continue" : "Start Assignment"}
-                                            </Button>
+                                            {assignment.lp_text && (
+                                                <p className="text-sm text-gray-600 line-clamp-2">
+                                                    {assignment.lp_text}
+                                                </p>
+                                            )}
+                                            <div className="mt-3">
+                                                <Button size="sm" className="w-full" asChild>
+                                                    <Link to={`/assessment/${assignment.activity_id}`}>
+                                                        Open Activity
+                                                    </Link>
+                                                </Button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
                             </div>
                         </Card>
 
@@ -283,55 +351,57 @@ export function StudentDashboard() {
 
                 {/* Assignments */}
                 <TabsContent value="assignments">
-                    <div className="space-y-3">
-                        {mockAssignments.map((assignment) => (
-                            <Card key={assignment.id} className="p-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <h3 className="text-lg">{assignment.title}</h3>
-                                            <Badge variant={
-                                                assignment.status === "completed" ? "secondary" :
-                                                    assignment.status === "in-progress" ? "default" :
-                                                        "outline"
-                                            }>
-                                                {assignment.status === "completed" ? "Completed" :
-                                                    assignment.status === "in-progress" ? "In Progress" :
-                                                        "Not Started"}
-                                            </Badge>
-                                            {assignment.aiHelp > 0 && (
-                                                <Badge variant="outline" className="gap-1">
-                                                    <Bot className="w-3 h-3" />
-                                                    {assignment.aiHelp} AI hints used
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                                            <span>{assignment.class}</span>
-                                            <span className="flex items-center gap-1">
-                                                <Clock className="w-4 h-4" />
-                                                Due {assignment.dueDate}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        {assignment.status === "completed" && assignment.grade && (
-                                            <div className="text-center">
-                                                <div className="text-2xl">{assignment.grade} percent</div>
-                                                <div className="text-sm text-gray-500">
-                                                    {assignment.feedback === "pending" ? "Pending review" : "Graded"}
+                    <div className="space-y-4">
+                        {loadingAssignments && (
+                            <Card className="p-4 text-sm text-gray-500">Loading assignments...</Card>
+                        )}
+                        {!loadingAssignments && assignmentsError && (
+                            <Card className="p-4 text-sm text-red-600">{assignmentsError}</Card>
+                        )}
+                        {!loadingAssignments && !assignmentsError && assignments.length === 0 && (
+                            <Card className="p-4 text-sm text-gray-500">
+                                No assignments are available right now. Check back soon!
+                            </Card>
+                        )}
+                        {!loadingAssignments && !assignmentsError && assignments.length > 0 && (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {assignments.map((assignment) => (
+                                    <Card
+                                        key={assignment.activity_id}
+                                        className="p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-lg">
+                                                    {assignment.activity_title || "Untitled Activity"}
+                                                </h3>
+                                                <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-600">
+                                                    <Badge variant="outline">ID {assignment.activity_id}</Badge>
+                                                    {assignment.pe && (
+                                                        <Badge variant="secondary">PE {assignment.pe}</Badge>
+                                                    )}
+                                                    {assignment.lp && (
+                                                        <Badge variant="outline">LP {assignment.lp}</Badge>
+                                                    )}
                                                 </div>
                                             </div>
+                                        </div>
+                                        {assignment.lp_text && (
+                                            <p className="text-sm text-gray-600 line-clamp-3">
+                                                {assignment.lp_text}
+                                            </p>
                                         )}
-                                        <Button>
-                                            {assignment.status === "completed" ? "View Results" :
-                                                assignment.status === "in-progress" ? "Continue" :
-                                                    "Start"}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
+                                        <div className="flex justify-end mt-auto">
+                                            <Button size="sm" asChild>
+                                                <Link to={`/assessment/${assignment.activity_id}`}>
+                                                    Start Activity
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </TabsContent>
 
