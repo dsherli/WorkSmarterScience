@@ -6,14 +6,14 @@ import string
 
 class Classroom(models.Model):
     GRADE_LEVEL_CHOICES = [
-        ('elementary', 'Elementary'),
-        ('middle', 'Middle'),
-        ('high', 'High'),
+        ("elementary", "Elementary"),
+        ("middle", "Middle"),
+        ("high", "High"),
     ]
     STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('archived', 'Archived'),
-        ('deleted', 'Deleted'),
+        ("active", "Active"),
+        ("archived", "Archived"),
+        ("deleted", "Deleted"),
     ]
 
     id = models.AutoField(primary_key=True)
@@ -25,16 +25,32 @@ class Classroom(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
     term = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
-        db_table = 'classroom'
+        db_table = "classroom"
 
     def __str__(self):
         return f"{self.name} ({self.code})"
 
     def save(self, *args, **kwargs):
         if not self.code:
-            self.code = ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+            self.code = "".join(
+                random.choices(string.ascii_letters + string.digits, k=5)
+            )
         super().save(*args, **kwargs)
+
+
+class Enrollment(models.Model):
+    classroom = models.ForeignKey(
+        Classroom, related_name="enrollments", on_delete=models.CASCADE
+    )
+    student = models.ForeignKey(
+        User, related_name="classroom_enrollments", on_delete=models.CASCADE
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("classroom", "student")
+        db_table = "classroom_enrollment"

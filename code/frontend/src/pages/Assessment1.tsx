@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
-import { resolveMediaUrl } from "../utils/media";
 
 export default function Assessment1() {
     const { activity_id } = useParams();
@@ -64,25 +63,26 @@ export default function Assessment1() {
                         <h2 className="font-semibold text-slate-900">Reference Media</h2>
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                             {activity.media.map((item: any, idx: number) => {
-                                const mediaUrl = resolveMediaUrl(item.url);
+                                const mediaUrl = item.url;
                                 return (
-                                <figure key={idx} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                                    {item.media_type === "image" ? (
-                                        <img
-                                            src={mediaUrl}
-                                            alt={item.description || `reference ${idx + 1}`}
-                                            className="block w-full h-auto object-contain"
-                                        />
-                                    ) : (
-                                        <video controls className="block w-full rounded-lg">
-                                            <source src={mediaUrl} type="video/mp4" />
-                                        </video>
-                                    )}
-                                    {item.description && (
-                                        <figcaption className="p-2 text-sm text-slate-600">{item.description}</figcaption>
-                                    )}
-                                </figure>
-                            );})}
+                                    <figure key={idx} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        {item.media_type === "image" ? (
+                                            <img
+                                                src={mediaUrl}
+                                                alt={item.description || `reference ${idx + 1}`}
+                                                className="block w-full h-auto object-contain"
+                                            />
+                                        ) : (
+                                            <video controls className="block w-full rounded-lg">
+                                                <source src={mediaUrl} type="video/mp4" />
+                                            </video>
+                                        )}
+                                        {item.description && (
+                                            <figcaption className="p-2 text-sm text-slate-600">{item.description}</figcaption>
+                                        )}
+                                    </figure>
+                                );
+                            })}
                         </div>
                     </section>
                 )}
