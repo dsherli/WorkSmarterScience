@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Progress } from "../components/ui/progress";
+import { Input } from "../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
     BookOpen,
@@ -13,7 +15,8 @@ import {
     MessageSquare,
     Award,
     Calendar,
-    Bot
+    Bot,
+    Loader2
 } from "lucide-react";
 
 const mockClasses = [
@@ -79,10 +82,14 @@ const mockRecentActivity = [
 ];
 
 export function StudentDashboard() {
-    const { user } = useAuth();
+    const { user, refresh } = useAuth();
     const [assignments, setAssignments] = useState<Assignment[]>([]);
     const [loadingAssignments, setLoadingAssignments] = useState<boolean>(true);
     const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+    const [joinCode, setJoinCode] = useState<string>("");
+    const [joiningClass, setJoiningClass] = useState<boolean>(false);
+    const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
+    const [joinError, setJoinError] = useState<string | null>(null);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -138,6 +145,80 @@ export function StudentDashboard() {
             controller.abort();
         };
     }, []);
+
+    const handleJoinClass = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const trimmed = joinCode.trim();
+        if (!trimmed) {
+            setJoinError("Please enter a class code.");
+            setJoinSuccess(null);
+            return;
+        }
+
+        setJoiningClass(true);
+        setJoinError(null);
+        setJoinSuccess(null);
+
+        try {
+            const token = localStorage.getItem("access_token");
+
+            const makeRequest = async (accessToken?: string | null) => {
+                const headers: Record<string, string> = { "Content-Type": "application/json" };
+                if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+
+                const res = await fetch("/api/classrooms/join/", {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ join_code: trimmed }),
+                });
+                return res;
+            };
+
+            let response = await makeRequest(token);
+
+            // If our access token was expired, try to refresh and retry once
+            if (response.status === 401) {
+                try {
+                    await refresh();
+                    const newToken = localStorage.getItem("access_token");
+                    response = await makeRequest(newToken);
+                } catch (e) {
+                    // ignore and fall through to error handling below
+                }
+            }
+
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                const detail =
+                    payload && typeof payload === "object" && payload !== null && "detail" in payload
+                        ? (payload as { detail: unknown }).detail
+                        : null;
+                const message = typeof detail === "string" ? detail : "We couldn't join that class. Try again.";
+                throw new Error(message);
+            }
+
+            const className =
+                payload && typeof payload === "object" && payload !== null && "name" in payload
+                    ? (payload as { name?: unknown }).name
+                    : null;
+
+            setJoinSuccess(
+                typeof className === "string" && className.trim().length
+                    ? `Joined ${className}.`
+                    : "Class joined successfully.",
+            );
+            setJoinCode("");
+        } catch (error) {
+            console.error("Failed to join class", error);
+            const message =
+                error instanceof Error ? error.message : "We couldn't join that class. Try again.";
+            setJoinError(message);
+        } finally {
+            setJoiningClass(false);
+        }
+    };
 
     const upcomingAssignments = assignments.slice(0, 3);
     const uniquePeCount = useMemo(() => {
@@ -318,7 +399,32 @@ export function StudentDashboard() {
                 </TabsContent>
 
                 {/* Classes */}
-                <TabsContent value="classes">
+                <TabsContent value="classes" className="space-y-4">
+                    <Card className="p-6">
+                        <h2 className="text-xl mb-4">Join a class</h2>
+                        <form onSubmit={handleJoinClass} className="flex flex-col gap-4 md:flex-row md:items-end">
+                            <div className="flex-1">
+                                <label htmlFor="join-code" className="block text-sm font-medium text-gray-700 mb-2">
+                                    Enter the code from your teacher
+                                </label>
+                                <Input
+                                    id="join-code"
+                                    value={joinCode}
+                                    onChange={(event) => setJoinCode(event.target.value)}
+                                    placeholder="e.g. AbC123"
+                                    autoComplete="off"
+                                    maxLength={10}
+                                />
+                            </div>
+                            <Button type="submit" disabled={joiningClass}>
+                                {joiningClass && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                {joiningClass ? "Joining..." : "Join Class"}
+                            </Button>
+                        </form>
+                        {joinError && <p className="text-sm text-red-600 mt-4">{joinError}</p>}
+                        {joinSuccess && <p className="text-sm text-green-600 mt-4">{joinSuccess}</p>}
+                    </Card>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {mockClasses.map((classItem) => (
                             <Card key={classItem.id} className="p-6 hover:shadow-lg transition-shadow">

@@ -2,13 +2,13 @@ from django.urls import path
 from .views import (
     ClassroomListCreateView,
     ClassroomDetailView,
-    EnrollmentJoinView,
     ClassroomMembershipListView,
+    StudentJoinClassView,
 )
 
 urlpatterns = [
     path("", ClassroomListCreateView.as_view(), name="classroom-list-create"),
     path("<int:pk>/", ClassroomDetailView.as_view(), name="classroom-detail"),
-    path("join/", EnrollmentJoinView.as_view()),
+    path("join/", StudentJoinClassView.as_view(), name="classroom-join"),
     path("enrolled/", ClassroomMembershipListView.as_view()),
 ]
