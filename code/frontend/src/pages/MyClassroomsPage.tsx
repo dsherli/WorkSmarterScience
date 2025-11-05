@@ -89,6 +89,7 @@ export default function ClassroomsPage() {
     );
     const [editClassroom, setEditClassroom] = useState<any>(null);
     const [isEditClassroomOpen, setIsEditClassroomOpen] = useState(false);
+    const [selectedClassroomCode, setSelectedClassroomCode] = useState<string | null>(null);
 
     const colors = [
         "from-blue-500 to-blue-600",
@@ -369,14 +370,22 @@ export default function ClassroomsPage() {
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>
-
-                            <Button
-                                size="sm"
-                                className="w-full"
-                                onClick={() => handleViewClassroom(classroom.id)}
-                            >
-                                View Classroom
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => handleViewClassroom(classroom.id)}
+                                >
+                                    View Classroom
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setSelectedClassroomCode(classroom.code)}
+                                >
+                                    Code
+                                    </Button>
+                            </div>
                         </Card>
                     ))}
                 </div>
@@ -480,6 +489,33 @@ export default function ClassroomsPage() {
                             </DialogFooter>
                         </form>
                     </Form>
+                </DialogContent>
+            </Dialog>
+            {/* Classroom Code Modal */}
+            <Dialog open={!!selectedClassroomCode} onOpenChange={() => setSelectedClassroomCode(null)}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle>Classroom Code</DialogTitle>
+                        <DialogDescription>
+                            Share this code with students to join the classroom
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-8">
+                        <div className="text-center">
+                            <div className="inline-block bg-gradient-to-br from-teal-500 to-cyan-600 text-white px-8 py-6 rounded-2xl shadow-lg">
+                                <p className="text-sm mb-2 opacity-90">Join Code</p>
+                                <p className="text-5xl tracking-wider font-mono">{selectedClassroomCode}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline" className="bg-white w-full"
+                            onClick={() => setSelectedClassroomCode(null)}
+                        >
+                            Close
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
             {/* Edit Modal */}

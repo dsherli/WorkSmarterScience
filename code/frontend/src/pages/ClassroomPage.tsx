@@ -576,7 +576,6 @@ export default function ClassroomPage() {
                             {/* Step 2: Activity Selection */}
                             {step === 'activity' && selectedCategory && (
                                 <div className="space-y-4">
-                                    {/* Back button */}
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -587,14 +586,13 @@ export default function ClassroomPage() {
                                         Back to categories
                                     </Button>
 
-                                    {/* Activity List */}
                                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                                         {activities
-                                            .filter((a: any) => a.category === selectedCategory)
-                                            .filter((a: any) =>
-                                                a.activity_title.toLowerCase().includes(searchQuery.toLowerCase()),
+                                            .filter((a) => a.category === selectedCategory)
+                                            .filter((a) =>
+                                                a.activity_title.toLowerCase().includes(searchQuery.toLowerCase())
                                             )
-                                            .map((activity: any) => (
+                                            .map((activity) => (
                                                 <Card
                                                     key={activity.activity_id || activity.id}
                                                     className={`p-4 cursor-pointer transition-all hover:shadow-md border-2 ${selectedActivity === String(activity.activity_id || activity.id)
@@ -607,29 +605,38 @@ export default function ClassroomPage() {
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex-1">
-                                                            <h4 className="font-medium mb-1">{activity.activity_title}</h4>
+                                                            <h4 className="font-medium mb-1">
+                                                                {activity.activity_title}
+                                                            </h4>
                                                             <div className="flex gap-2">
                                                                 {activity.pe && (
-                                                                    <Badge variant="outline" className="text-xs bg-white">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="text-xs bg-white"
+                                                                    >
                                                                         {activity.pe}
                                                                     </Badge>
                                                                 )}
                                                                 {activity.lp && (
-                                                                    <Badge variant="outline" className="text-xs bg-white">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="text-xs bg-white"
+                                                                    >
                                                                         Learning Performance {activity.lp}
                                                                     </Badge>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        {selectedActivity === String(activity.activity_id || activity.id) && (
-                                                            <CheckCircle2 className="w-5 h-5 text-teal-600 flex-shrink-0 ml-3" />
-                                                        )}
+                                                        {selectedActivity ===
+                                                            String(activity.activity_id || activity.id) && (
+                                                                <CheckCircle2 className="w-5 h-5 text-teal-600 flex-shrink-0 ml-3" />
+                                                            )}
                                                     </div>
                                                 </Card>
                                             ))}
                                     </div>
 
-                                    {activities.filter((a: any) => a.category === selectedCategory).length === 0 && (
+                                    {activities.filter((a) => a.category === selectedCategory).length === 0 && (
                                         <div className="text-center py-8 text-gray-500">
                                             No activities found matching your search
                                         </div>
@@ -640,7 +647,6 @@ export default function ClassroomPage() {
                             {/* Step 3: Date Selection */}
                             {step === 'date' && selectedActivityData && (
                                 <div className="space-y-4">
-                                    {/* Back button */}
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -651,11 +657,12 @@ export default function ClassroomPage() {
                                         Back to activities
                                     </Button>
 
-                                    {/* Selected Activity Info */}
                                     <Card className="p-4 bg-gradient-to-r from-teal-50 to-cyan-50 border-teal-200">
                                         <div className="flex items-start justify-between">
                                             <div>
-                                                <h4 className="font-medium mb-1">{selectedActivityData.activity_title}</h4>
+                                                <h4 className="font-medium mb-1">
+                                                    {selectedActivityData.activity_title}
+                                                </h4>
                                                 <div className="flex gap-2">
                                                     {selectedActivityData.pe && (
                                                         <Badge variant="outline" className="text-xs bg-white">
@@ -679,154 +686,141 @@ export default function ClassroomPage() {
                                             Select Due Date &amp; Time
                                         </label>
 
-                                        <div className="bg-gradient-to-br from-teal-50/50 to-cyan-50/50 rounded-xl p-6 border border-teal-100 isolate !bg-opacity-100">
+                                        <div className="bg-gradient-to-br from-teal-50/50 to-cyan-50/50 rounded-xl p-6 border border-teal-100 isolate">
                                             {/* Date Grid */}
                                             <div className="mb-6">
-                                                <p className="text-xs uppercase tracking-wider text-teal-600 mb-3">Date</p>
-                                                <div className="grid grid-cols-3 gap-4">
-                                                    {/* Month */}
-                                                    <div className="space-y-2">
-                                                        <label className="text-xs text-gray-500 block text-center">Month</label>
-                                                        <div className="relative">
+                                                <p className="text-xs uppercase tracking-wider text-teal-600 mb-3">
+                                                    Date
+                                                </p>
+                                                <div className="grid grid-cols-3 gap-4 items-end">
+                                                    {[
+                                                        { id: 'month', label: 'Month', max: 12, placeholder: 'MM' },
+                                                        { id: 'day', label: 'Day', max: 31, placeholder: 'DD' },
+                                                        { id: 'year', label: 'Year', max: 9999, placeholder: 'YYYY' },
+                                                    ].map((field) => (
+                                                        <div key={field.id} className="space-y-2">
+                                                            <label className="text-xs text-gray-500 block text-center">
+                                                                {field.label}
+                                                            </label>
                                                             <Input
                                                                 type="number"
-                                                                min="1"
-                                                                max="12"
-                                                                value={dueDateParts.month}
+                                                                value={dueDateParts[field.id]}
                                                                 onChange={(e) => {
-                                                                    const val = Math.min(
-                                                                        12,
-                                                                        Math.max(1, parseInt(e.target.value, 10) || 0),
-                                                                    );
+                                                                    const val = e.target.value;
+                                                                    if (!/^\d*$/.test(val)) return;
                                                                     setDueDateParts((prev) => ({
                                                                         ...prev,
-                                                                        month: val ? val.toString() : '',
+                                                                        [field.id]: val,
                                                                     }));
                                                                 }}
-                                                                className="text-center text-2xl h-16 bg-white border-2 border-teal-200 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                style={{ textAlign: 'center' }}
-                                                                placeholder="MM"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Day */}
-                                                    <div className="space-y-2">
-                                                        <label className="text-xs text-gray-500 block text-center">Day</label>
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min="1"
-                                                                max="31"
-                                                                value={dueDateParts.day}
-                                                                onChange={(e) => {
-                                                                    const val = Math.min(
-                                                                        31,
-                                                                        Math.max(1, parseInt(e.target.value, 10) || 0),
-                                                                    );
-                                                                    setDueDateParts((prev) => ({
-                                                                        ...prev,
-                                                                        day: val ? val.toString() : '',
-                                                                    }));
+                                                                onBlur={(e) => {
+                                                                    const num = parseInt(e.target.value, 10);
+                                                                    if (!isNaN(num)) {
+                                                                        let val = num;
+                                                                        if (field.id === 'month')
+                                                                            val = Math.min(12, Math.max(1, num));
+                                                                        if (field.id === 'day')
+                                                                            val = Math.min(31, Math.max(1, num));
+                                                                        if (field.id === 'year') {
+                                                                            const minYear = new Date().getFullYear();
+                                                                            const maxYear = minYear + 10;
+                                                                            val = Math.min(
+                                                                                maxYear,
+                                                                                Math.max(minYear, num)
+                                                                            );
+                                                                        }
+                                                                        setDueDateParts((prev) => ({
+                                                                            ...prev,
+                                                                            [field.id]: val.toString(),
+                                                                        }));
+                                                                    }
                                                                 }}
+                                                                placeholder={field.placeholder}
                                                                 className="text-center text-2xl h-16 bg-white border-2 border-teal-200 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                style={{ textAlign: 'center' }}
-                                                                placeholder="DD"
                                                             />
                                                         </div>
-                                                    </div>
-
-                                                    {/* Year */}
-                                                    <div className="space-y-2">
-                                                        <label className="text-xs text-gray-500 block text-center">Year</label>
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min={new Date().getFullYear()}
-                                                                max={new Date().getFullYear() + 10}
-                                                                value={dueDateParts.year}
-                                                                onChange={(e) => {
-                                                                    const num = parseInt(e.target.value, 10) || 0;
-                                                                    const minYear = new Date().getFullYear();
-                                                                    const maxYear = minYear + 10;
-                                                                    const val = Math.min(maxYear, Math.max(minYear, num));
-                                                                    setDueDateParts((prev) => ({
-                                                                        ...prev,
-                                                                        year: val ? val.toString() : '',
-                                                                    }));
-                                                                }}
-                                                                className="text-center text-2xl h-16 bg-white border-2 border-teal-200 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                style={{ textAlign: 'center' }}
-                                                                placeholder="YYYY"
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                    ))}
                                                 </div>
                                             </div>
 
                                             {/* Time Grid */}
                                             <div>
-                                                <p className="text-xs uppercase tracking-wider text-teal-600 mb-3">Time</p>
-                                                <div className="grid grid-cols-3 gap-4 isolate">
+                                                <p className="text-xs uppercase tracking-wider text-teal-600 mb-3">
+                                                    Time
+                                                </p>
+                                                <div className="grid grid-cols-3 gap-4 items-end">
                                                     {/* Hour */}
                                                     <div className="space-y-2">
-                                                        <label className="text-xs text-gray-500 block text-center">Hour</label>
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min="1"
-                                                                max="12"
-                                                                value={dueTime.hour}
-                                                                onChange={(e) => {
-                                                                    const val = Math.min(
-                                                                        12,
-                                                                        Math.max(1, parseInt(e.target.value, 10) || 1),
-                                                                    );
+                                                        <label className="text-xs text-gray-500 block text-center">
+                                                            Hour
+                                                        </label>
+                                                        <Input
+                                                            type="number"
+                                                            value={dueTime.hour}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (!/^\d*$/.test(val)) return;
+                                                                setDueTime((prev) => ({ ...prev, hour: val }));
+                                                            }}
+                                                            onBlur={(e) => {
+                                                                const num = parseInt(e.target.value, 10);
+                                                                if (!isNaN(num)) {
+                                                                    const val = Math.min(12, Math.max(1, num));
                                                                     setDueTime((prev) => ({
                                                                         ...prev,
                                                                         hour: val.toString(),
                                                                     }));
-                                                                }}
-                                                                className="text-center text-2xl h-16 bg-white border-2 border-cyan-200 focus:border-cyan-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                style={{ textAlign: 'center' }}
-                                                                placeholder="HH"
-                                                            />
-                                                        </div>
+                                                                }
+                                                            }}
+                                                            placeholder="HH"
+                                                            className="text-center text-2xl h-16 bg-white border-2 border-cyan-200 focus:border-cyan-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                        />
                                                     </div>
 
                                                     {/* Minute */}
                                                     <div className="space-y-2">
-                                                        <label className="text-xs text-gray-500 block text-center">Minute</label>
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                max="59"
-                                                                value={dueTime.minute}
-                                                                onChange={(e) => {
-                                                                    const val = Math.min(
-                                                                        59,
-                                                                        Math.max(0, parseInt(e.target.value, 10) || 0),
-                                                                    );
+                                                        <label className="text-xs text-gray-500 block text-center">
+                                                            Minute
+                                                        </label>
+                                                        <Input
+                                                            type="number"
+                                                            value={dueTime.minute}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (!/^\d*$/.test(val)) return;
+                                                                setDueTime((prev) => ({ ...prev, minute: val }));
+                                                            }}
+                                                            onBlur={(e) => {
+                                                                const num = parseInt(e.target.value, 10);
+                                                                if (!isNaN(num)) {
+                                                                    const val = Math.min(59, Math.max(0, num));
                                                                     setDueTime((prev) => ({
                                                                         ...prev,
-                                                                        minute: val.toString().padStart(2, '0'),
+                                                                        minute: val
+                                                                            .toString()
+                                                                            .padStart(2, '0'),
                                                                     }));
-                                                                }}
-                                                                className="text-center text-2xl h-16 bg-white border-2 border-cyan-200 focus:border-cyan-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                                                style={{ textAlign: 'center' }}
-                                                                placeholder="MM"
-                                                            />
-                                                        </div>
+                                                                }
+                                                            }}
+                                                            placeholder="MM"
+                                                            className="text-center text-2xl h-16 bg-white border-2 border-cyan-200 focus:border-cyan-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                                        />
                                                     </div>
 
                                                     {/* AM/PM */}
                                                     <div className="space-y-2">
-                                                        <label className="text-xs text-gray-500 block text-center">Period</label>
-                                                        <div className="flex gap-2">
+                                                        <label className="text-xs text-gray-500 block text-center">
+                                                            Period
+                                                        </label>
+                                                        <div className="flex gap-2 items-stretch">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setDueTime((prev) => ({ ...prev, period: 'AM' }))}
+                                                                onClick={() =>
+                                                                    setDueTime((prev) => ({
+                                                                        ...prev,
+                                                                        period: 'AM',
+                                                                    }))
+                                                                }
                                                                 className={`flex-1 h-16 rounded-lg transition-all flex items-center justify-center ${dueTime.period === 'AM'
                                                                         ? 'bg-teal-600 text-white scale-105 shadow-md'
                                                                         : 'bg-white border-2 border-cyan-200 text-gray-600 hover:border-cyan-300'
@@ -836,7 +830,12 @@ export default function ClassroomPage() {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setDueTime((prev) => ({ ...prev, period: 'PM' }))}
+                                                                onClick={() =>
+                                                                    setDueTime((prev) => ({
+                                                                        ...prev,
+                                                                        period: 'PM',
+                                                                    }))
+                                                                }
                                                                 className={`flex-1 h-16 rounded-lg transition-all flex items-center justify-center ${dueTime.period === 'PM'
                                                                         ? 'bg-teal-600 text-white scale-105 shadow-md'
                                                                         : 'bg-white border-2 border-cyan-200 text-gray-600 hover:border-cyan-300'
