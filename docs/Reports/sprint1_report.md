@@ -27,7 +27,7 @@ Issue #2: Functional and Non-Functional Requirements
 Issue #1: User Login
 
 We also held stakeholder meetings, met with our mentor, and started revising our requirements based on the feedback we received.
- 
+
 ## Incomplete Issues/User Stories
 * N/A - Moving forward we'll be tracking everything through GitHub issues from the start.
 
@@ -42,12 +42,12 @@ Here's what went well:
 * We established good communication with stakeholders despite initial confusion
 * Repository setup and frontend initialization went smoothly
 * Everyone was open to the feedback and willing to revise our approach
- 
+
 Here's what we'd like to improve:
 * Better upfront validation of proposals against actual client needs
 * More systematic documentation of requirements as we gather them
 
-  
+
 Here are changes we plan to implement in the next sprint:
 * Complete the revised requirements and user stories
 * Set up GitHub issues with acceptance criteria and story points before starting work

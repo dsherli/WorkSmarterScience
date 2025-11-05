@@ -14,14 +14,19 @@ NO_STORE = {
     "Pragma": "no-cache",
 }
 
+
 def _has_field(model, name: str) -> bool:
+    """Check if a given field exists on the model."""
     return any(getattr(f, "name", None) == name for f in model._meta.get_fields())
+
 
 # 1. CSRF
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def csrf_token(request):
+    """Return a valid CSRF token for frontend requests."""
     return JsonResponse({"csrfToken": get_token(request)})
+
 
 # 2. Register
 @api_view(["POST"])
@@ -29,6 +34,7 @@ def csrf_token(request):
 def register_view(request):
     """
     Accepts: {username, email, password, first_name?, last_name?, role?}
+    Returns: {user, access, refresh}
     """
     username = request.data.get("username")
     email = request.data.get("email")
@@ -38,24 +44,39 @@ def register_view(request):
     role = (request.data.get("role") or "").lower()
 
     if not username or not email or not password:
-        return Response({"detail": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE)
+        return Response(
+            {"detail": "Missing required fields"},
+            status=status.HTTP_400_BAD_REQUEST,
+            headers=NO_STORE,
+        )
 
     dup_username = User.objects.filter(username__iexact=username).exists()
     dup_email = User.objects.filter(email__iexact=email).exists()
 
-    # ---------------------------------------------------------------- debug
-    print("[REGISTER DEBUG]", {
-        "user_model": f"{User.__module__}.{User.__name__}",
-        "db_table": User._meta.db_table,
-        "username": username,
-        "exists_username": dup_username,
-        "exists_email": dup_email,
-    })
+    # Debug
+    print(
+        "[REGISTER DEBUG]",
+        {
+            "user_model": f"{User.__module__}.{User.__name__}",
+            "db_table": User._meta.db_table,
+            "username": username,
+            "exists_username": dup_username,
+            "exists_email": dup_email,
+        },
+    )
 
     if dup_username:
-        return Response({"detail": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE)
+        return Response(
+            {"detail": "Username already exists"},
+            status=status.HTTP_400_BAD_REQUEST,
+            headers=NO_STORE,
+        )
     if dup_email:
-        return Response({"detail": "Email already exists"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE)
+        return Response(
+            {"detail": "Email already exists"},
+            status=status.HTTP_400_BAD_REQUEST,
+            headers=NO_STORE,
+        )
 
     try:
         create_kwargs = dict(
@@ -69,7 +90,6 @@ def register_view(request):
             create_kwargs["role"] = role
 
         user = User.objects.create_user(**create_kwargs)
-
         resp_role = getattr(user, "role", role)
 
         refresh = RefreshToken.for_user(user)
@@ -92,21 +112,35 @@ def register_view(request):
         )
     except Exception as e:
         print(f"[REGISTER ERROR] {e}")
-        return Response({"detail": f"Registration failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR, headers=NO_STORE)
+        return Response(
+            {"detail": f"Registration failed: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            headers=NO_STORE,
+        )
+
 
 # 3. Login
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login_view(request):
+    """JWT-based login endpoint."""
     username = request.data.get("username")
     password = request.data.get("password")
 
     if not username or not password:
-        return Response({"detail": "Missing username or password"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE)
+        return Response(
+            {"detail": "Missing username or password"},
+            status=status.HTTP_400_BAD_REQUEST,
+            headers=NO_STORE,
+        )
 
     user = authenticate(username=username, password=password)
     if user is None:
-        return Response({"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST, headers=NO_STORE)
+        return Response(
+            {"detail": "Invalid credentials"},
+            status=status.HTTP_400_BAD_REQUEST,
+            headers=NO_STORE,
+        )
 
     refresh = RefreshToken.for_user(user)
     access = str(refresh.access_token)
@@ -126,10 +160,12 @@ def login_view(request):
         headers=NO_STORE,
     )
 
+
 # 4. Current user
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def current_user(request):
+    """Return basic info for the authenticated user."""
     user = request.user
     return Response(
         {

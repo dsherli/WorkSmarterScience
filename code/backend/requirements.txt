@@ -9,3 +9,5 @@ PyJWT==2.10.1
 python-dotenv==1.1.1
 sqlparse==0.5.3
 typing_extensions==4.15.0
+dj_database_url==1.2.0
+dotenv==0.9.9

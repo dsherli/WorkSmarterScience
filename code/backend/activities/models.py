@@ -35,7 +35,6 @@ class ScienceActivity(models.Model):
     )
 
     category = models.CharField(max_length=50, null=True, blank=True)
-
     tags = models.JSONField(null=True, blank=True)
 
     class Meta:
@@ -45,9 +44,23 @@ class ScienceActivity(models.Model):
     def __str__(self):
         return f"{self.activity_id} - {self.activity_title or 'Untitled'} (v{self.version:.1f})"
 
+
+class ScienceActivityImages(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    activity = models.ForeignKey(
+        ScienceActivity,
+        on_delete=models.CASCADE,
+        db_column="activity_id",
+        related_name="media_files",
+    )
+    file_path = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    media_type = models.CharField(max_length=20, default="image")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+
 @receiver(pre_save, sender=ScienceActivity)
 def update_version_and_timestamp(sender, instance, **kwargs):
-
     instance.updated_at = timezone.now()
 
     if not instance.pk:

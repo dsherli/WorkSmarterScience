@@ -8,7 +8,9 @@ if not hasattr(User, 'role'):
     )
 
 class StudentProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='student_profile')
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="student_profile"
+    )
     school = models.CharField(max_length=255, blank=True)
     grade = models.CharField(max_length=50, blank=True)
 

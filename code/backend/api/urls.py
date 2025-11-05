@@ -17,6 +17,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 
+
 @api_view(["GET"])
 def health(request):
     """Simple API health check endpoint."""
@@ -26,18 +27,15 @@ def health(request):
 urlpatterns = [
     # Admin panel
     path("admin/", admin.site.urls),
-
     # Health check
     path("api/health/", health),
-
     # Authentication routes (custom student-related logic)
     path("api/auth/", include("students.urls")),
-
     # Science activities routes
     path("api/activities/", include("activities.urls")),
 
     # Classroom
-    path('api/classrooms/', include('classrooms.urls')),
+    path("api/classrooms/", include("classrooms.urls")),
 
     # JWT authentication endpoints
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
