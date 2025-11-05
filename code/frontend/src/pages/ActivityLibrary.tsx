@@ -41,7 +41,6 @@ export default function ActivityDashboard() {
                 const data = await res.json();
                 setActivities(data);
             } catch (err) {
-                console.error("Error fetching activities:", err);
                 toast.error("Failed to load activities");
             } finally {
                 setLoading(false);
@@ -70,7 +69,6 @@ export default function ActivityDashboard() {
                 const activeClassrooms = data.filter((c: any) => c.status === "active");
                 setClassrooms(activeClassrooms);
             } catch (err) {
-                console.error("Error fetching classrooms:", err);
                 toast.error("Failed to load classrooms");
             }
         };
@@ -107,7 +105,6 @@ export default function ActivityDashboard() {
             const data = await res.json();
             setPreviewActivity(data);
         } catch (err) {
-            console.error("Error loading preview:", err);
             toast.error("Failed to load preview");
         } finally {
             setPreviewLoading(false);

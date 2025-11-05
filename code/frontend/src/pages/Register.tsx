@@ -21,14 +21,11 @@ export default function Register() {
     const [role] = useState(roleFromState || "student");
 
     useEffect(() => {
-        console.log("Role received from App:", role);
     }, [role]);
 
     useEffect(() => {
-        console.log("Fetching CSRF token...");
         fetch("/api/auth/csrf/", { credentials: "include" })
             .then((res) => {
-                console.log("CSRF status:", res.status);
                 return res.text();
             })
             .then((t) => console.log("CSRF response text:", t))
@@ -74,13 +71,6 @@ export default function Register() {
                 role,
             };
 
-            console.group("REGISTER DEBUG LOG");
-            console.log("Role:", role);
-            console.log("CSRF Token:", csrftoken);
-            console.log("Payload to be sent:", payload);
-            console.log("JSON Body:", JSON.stringify(payload, null, 2));
-            console.groupEnd();
-
             const res = await fetch("/api/auth/register/", {
                 method: "POST",
                 headers,
@@ -88,9 +78,7 @@ export default function Register() {
                 body: JSON.stringify(payload),
             });
 
-            console.log("Response Status:", res.status);
             const text = await res.text();
-            console.log("Raw Response Text:", text);
 
             let data;
             try {
@@ -100,15 +88,12 @@ export default function Register() {
             }
 
             if (res.ok) {
-                console.log("Registration Success:", data);
                 await refresh?.();
                 navigate("/login");
             } else {
-                console.warn("Registration Failed:", data);
                 setError(data.detail || "Registration failed");
             }
         } catch (err) {
-            console.error("Network or Fetch Error:", err);
             setError("Network error");
         } finally {
             setLoading(false);

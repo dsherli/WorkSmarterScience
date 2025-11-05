@@ -17,7 +17,6 @@ export default function Assessment1() {
                 setLoading(false);
             })
             .catch((err) => {
-                console.error("Error fetching activity:", err);
                 setLoading(false);
             });
     }, [activity_id]);

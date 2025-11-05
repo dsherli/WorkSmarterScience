@@ -115,7 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 await Promise.all(keys.map((k) => caches.delete(k)));
             }
         } catch (err) {
-            console.warn("Logout cleanup failed:", err);
         } finally {
             window.location.href = "/login";
         }

@@ -131,7 +131,6 @@ export default function ClassroomPage() {
         fetch(`/api/activities/released/?category=${selectedCategory}`)
             .then((res) => res.json())
             .then((data) => {
-                console.log('Fetched released activities:', data);
                 setActivities(data);
             })
             .catch((err) => console.error('Failed to fetch activities', err));
@@ -246,18 +245,14 @@ export default function ClassroomPage() {
     };
 
     const fetchCategoryCounts = async () => {
-        console.log('Fetching category counts...');
         try {
             const res = await fetch('/api/activities/counts/');
             if (res.ok) {
                 const data = await res.json();
-                console.log('Category counts:', data);
                 setCategoryCounts(data);
             } else {
-                console.error('Failed to fetch category counts');
             }
         } catch (err) {
-            console.error('Error fetching counts', err);
         }
     };
 
