@@ -29,20 +29,14 @@ export default function Login() {
             });
 
             const data = await res.json();
-            console.log("🔐 Token endpoint response:", data);
 
             if (res.ok && data.access) {
-                console.log("✅ Login success, storing tokens...");
                 localStorage.setItem("access_token", data.access);
                 localStorage.setItem("refresh_token", data.refresh);
 
-                console.log("🔁 Before refresh()");
                 await refresh?.();
-                console.log("🔁 After refresh()");
 
-                console.log("🕓 Waiting briefly before navigating...");
                 setTimeout(() => {
-                    console.log("➡️ Navigating to dashboard...");
                     navigate("/dashboard");
                 }, 100);
 
@@ -50,13 +44,11 @@ export default function Login() {
                 setError(data.detail || "Invalid username or password");
             }
         } catch (error) {
-            console.error("❌ Network error:", error);
             setError("Network error");
         } finally {
             setLoading(false);
         }
     }
-
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-blue-50 flex items-center justify-center px-6 py-12">

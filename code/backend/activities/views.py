@@ -13,13 +13,23 @@ def get_science_activities(request):
     This endpoint is used for the dashboard list view.
     """
     activities = ScienceActivity.objects.all().values(
+        "id",
         "activity_id",
         "activity_title",
+        "activity_task",
         "pe",
         "lp",
         "lp_text",
-    )
-    return Response(list(activities))
+        "category",
+        "is_released",
+        "created_at",
+        "updated_at",
+        "version",
+        "created_by_id",
+        "tags",
+    ).order_by("-created_at")
+
+    return Response(list(activities), status=200)
 
 
 @api_view(["GET"])
@@ -30,11 +40,10 @@ def get_science_activity(request, activity_id):
     from the science_activity_images table.
     """
     try:
-        # 1. load activity
         activity = ScienceActivity.objects.get(activity_id=activity_id)
         base_url = request.build_absolute_uri("/").rstrip("/")
 
-        # 2. search image
+        # Fetch related media
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT file_path, description, media_type
@@ -44,13 +53,10 @@ def get_science_activity(request, activity_id):
             """, [activity.id])
             media_records = cursor.fetchall()
 
-        # 3. JSON
         media = []
         for path, desc, mtype in media_records:
             if not path:
                 continue
-
-            # route
             if path.startswith("http"):
                 file_url = path
             else:
@@ -65,7 +71,6 @@ def get_science_activity(request, activity_id):
                 "media_type": mtype or "image",
             })
 
-        # 4. questions
         questions = [
             q.strip()
             for q in [
@@ -78,10 +83,21 @@ def get_science_activity(request, activity_id):
             if q and q.strip()
         ]
 
-        # 5. response
         data = {
+            "id": activity.id,
+            "activity_id": activity.activity_id,
             "activity_title": activity.activity_title,
             "activity_task": activity.activity_task,
+            "category": activity.category,
+            "pe": activity.pe,
+            "lp": activity.lp,
+            "lp_text": activity.lp_text,
+            "tags": activity.tags,
+            "version": activity.version,
+            "is_released": activity.is_released,
+            "created_at": activity.created_at,
+            "updated_at": activity.updated_at,
+            "created_by_id": activity.created_by.id if activity.created_by else None,
             "media": media,
             "questions": questions,
         }
@@ -90,7 +106,58 @@ def get_science_activity(request, activity_id):
 
     except ScienceActivity.DoesNotExist:
         return Response({"error": "Activity not found"}, status=404)
-
     except Exception as e:
-        # error handling
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_released_science_activities(request):
+    """
+    Retrieve released science activities (is_released = True).
+    Used for classroom activity selection modal.
+    """
+    try:
+        category = request.GET.get("category", "").strip().upper()
+        valid_categories = {"PS", "LS", "ESS", "ETS"}
+
+        query = ScienceActivity.objects.filter(is_released=True)
+        if category in valid_categories:
+            query = query.filter(category=category)
+
+        activities = query.values(
+            "id",
+            "activity_id",
+            "activity_title",
+            "activity_task",
+            "category",
+            "pe",
+            "lp",
+            "lp_text",
+            "tags",
+            "created_at",
+            "updated_at",
+            "version",
+            "created_by_id",
+        ).order_by("-created_at")
+
+        return Response(list(activities), status=200)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_activity_counts(request):
+    """
+    Count how many released science activities exist per category.
+    """
+    try:
+        categories = ['PS', 'LS', 'ESS', 'ETS']
+        counts = {
+            cat: ScienceActivity.objects.filter(is_released=True, category=cat).count()
+            for cat in categories
+        }
+        return Response(counts, status=200)
+    except Exception as e:
         return Response({"error": str(e)}, status=500)

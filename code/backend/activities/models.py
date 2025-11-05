@@ -1,44 +1,69 @@
 from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+from django.utils import timezone
 
 
 class ScienceActivity(models.Model):
     id = models.BigAutoField(primary_key=True)
     activity_id = models.CharField(max_length=50, unique=True)
+    activity_title = models.CharField(max_length=255, null=True, blank=True)
+    activity_task = models.TextField(null=True, blank=True)
+
     pe = models.CharField(max_length=50, null=True, blank=True)
     lp = models.CharField(max_length=50, null=True, blank=True)
     lp_text = models.TextField(null=True, blank=True)
-    activity_title = models.CharField(max_length=255, null=True, blank=True)
-    activity_task = models.TextField(null=True, blank=True)
+
     question_1 = models.TextField(null=True, blank=True)
     question_2 = models.TextField(null=True, blank=True)
     question_3 = models.TextField(null=True, blank=True)
     question_4 = models.TextField(null=True, blank=True)
     question_5 = models.TextField(null=True, blank=True)
 
+    is_released = models.BooleanField(default=False)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+
+    version = models.FloatField(default=0.1)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    category = models.CharField(max_length=50, null=True, blank=True)
+
+    tags = models.JSONField(null=True, blank=True)
+
     class Meta:
         db_table = '"public"."science_activity"'
         managed = False
 
     def __str__(self):
-        return f"{self.activity_id} - {self.activity_title or 'Untitled'}"
+        return f"{self.activity_id} - {self.activity_title or 'Untitled'} (v{self.version:.1f})"
 
+@receiver(pre_save, sender=ScienceActivity)
+def update_version_and_timestamp(sender, instance, **kwargs):
 
-class ScienceActivityImages(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    activity = models.ForeignKey(
-        ScienceActivity,
-        on_delete=models.CASCADE,
-        db_column='activity_id',
-        related_name='media_files',
-    )
-    file_path = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    media_type = models.CharField(max_length=20, default='image')
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    instance.updated_at = timezone.now()
 
-    class Meta:
-        db_table = '"public"."science_activity_images"'
-        managed = False
+    if not instance.pk:
+        return
 
-    def __str__(self):
-        return f"{self.activity.activity_id} - {self.file_path}"
+    try:
+        old_instance = ScienceActivity.objects.get(pk=instance.pk)
+
+        fields_to_check = [
+            "activity_title", "activity_task",
+            "pe", "lp", "lp_text", "category", "tags"
+        ]
+        if any(
+            getattr(instance, f) != getattr(old_instance, f)
+            for f in fields_to_check
+        ):
+            instance.version = round(old_instance.version + 0.1, 1)
+    except ScienceActivity.DoesNotExist:
+        pass

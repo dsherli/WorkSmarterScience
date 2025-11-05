@@ -19,19 +19,12 @@ import {
 } from "../components/ui/select";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
-import { Plus, Atom, Sprout, Earth, Wrench } from "lucide-react";
-
-// Mock classrooms
-const mockClassrooms = [
-    { id: 1, name: "Biology 101 - Period 1" },
-    { id: 2, name: "Chemistry 201 - Period 3" },
-    { id: 3, name: "Physics 301 - Period 5" },
-    { id: 4, name: "Earth Science - Period 7" },
-];
+import { Plus, FlaskConical, Leaf, Earth, Wrench } from "lucide-react";
 
 export default function ActivityDashboard() {
     const [loading, setLoading] = useState(true);
     const [activities, setActivities] = useState<any[]>([]);
+    const [classrooms, setClassrooms] = useState<any[]>([]);
     const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
     const [selectedClassroom, setSelectedClassroom] = useState<string>("");
     const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
@@ -57,13 +50,41 @@ export default function ActivityDashboard() {
         fetchActivities();
     }, []);
 
+    // show classroom selection (only active)
+    useEffect(() => {
+        const fetchClassrooms = async () => {
+            try {
+                const token = localStorage.getItem("access_token");
+                if (!token) throw new Error("No token found");
+
+                const res = await fetch("/api/classrooms/", {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!res.ok) throw new Error("Failed to fetch classrooms");
+                const data = await res.json();
+
+                const activeClassrooms = data.filter((c: any) => c.status === "active");
+                setClassrooms(activeClassrooms);
+            } catch (err) {
+                console.error("Error fetching classrooms:", err);
+                toast.error("Failed to load classrooms");
+            }
+        };
+
+        fetchClassrooms();
+    }, []);
+
     const handleAddToClassroom = () => {
         if (!selectedClassroom) {
             toast.error("Please select a classroom");
             return;
         }
 
-        const classroom = mockClassrooms.find(
+        const classroom = classrooms.find(
             (c) => c.id.toString() === selectedClassroom
         );
         toast.success("Activity added successfully!", {
@@ -124,8 +145,8 @@ export default function ActivityDashboard() {
                     onClick={() => handleFilterClick("PS")}
                 >
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white">
-                            <Atom className="w-5 h-5" />
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-400 to-yellow-400 flex items-center justify-center text-white">
+                            <FlaskConical className="w-5 h-5" />
                         </div>
                         <div>
                             <div className="text-sm text-gray-600">
@@ -149,8 +170,8 @@ export default function ActivityDashboard() {
                     onClick={() => handleFilterClick("LS")}
                 >
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white">
-                            <Sprout className="w-5 h-5" />
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-400 to-emerald-400 flex items-center justify-center text-white">
+                            <Leaf className="w-5 h-5" />
                         </div>
                         <div>
                             <div className="text-sm text-gray-600">
@@ -176,7 +197,7 @@ export default function ActivityDashboard() {
                     onClick={() => handleFilterClick("ESS")}
                 >
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-sky-400 flex items-center justify-center text-white">
                             <Earth className="w-5 h-5" />
                         </div>
                         <div>
@@ -203,7 +224,7 @@ export default function ActivityDashboard() {
                     onClick={() => handleFilterClick("ETS")}
                 >
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-400 to-indigo-400 flex items-center justify-center text-white">
                             <Wrench className="w-5 h-5" />
                         </div>
                         <div>
@@ -327,7 +348,7 @@ export default function ActivityDashboard() {
                                     <SelectValue placeholder="Choose a classroom" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-white">
-                                    {mockClassrooms.map((classroom) => (
+                                    {classrooms.map((classroom) => (
                                         <SelectItem
                                             key={classroom.id}
                                             value={classroom.id.toString()}
