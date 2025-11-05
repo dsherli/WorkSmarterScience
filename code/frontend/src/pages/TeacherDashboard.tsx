@@ -202,8 +202,6 @@ export function TeacherDashboard() {
             });
 
             const data = await response.json().catch(() => null);
-            console.log("Payload:", payload);
-            console.log("Server response:", data);
 
             if (response.ok) {
                 toast.success("Classroom created successfully!");
