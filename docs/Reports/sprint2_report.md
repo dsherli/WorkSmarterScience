@@ -21,7 +21,7 @@ Over this sprint we wired the end-to-end authentication experience. Our Django a
 * [#16 – Surface NGSS activity catalog to students](https://github.com/dsherli/WorkSmarterScience/issues/16)
 * [#19 – Stand up Docker-based dev environment and CI pipeline](https://github.com/dsherli/WorkSmarterScience/issues/19)
 
-## Incomplete Issues/User Stories
+## Incomplete Issues/User Stories (TODO)
 * [#21 – Route student submissions to teachers for review](https://github.com/dsherli/WorkSmarterScience/issues/21) – Blocked on finalizing acceptance criteria for review states.
 * [#23 – Integrate AI assistant evaluation service](https://github.com/dsherli/WorkSmarterScience/issues/23) – Waiting on API credentials from vendor before wiring backend.
 
@@ -36,13 +36,16 @@ Here's what went well:
 * Cross-functional pairing between frontend and backend reduced integration bugs.
 * Docker Compose made it easy for the whole team to run the full stack locally.
 * Pulling NGSS content directly into the dashboard created an immediate wow moment in demos.
+* Shipped a large amount of features and elicited requirements as the team worked.
 
 Here's what we'd like to improve:
 * We still underestimate time required to harden new endpoints before exposing them.
 * Test coverage around authentication regressions is thin and needs automation.
 * Classroom membership edge cases (duplicate joins, role-based access) need more QA.
+* AI evaluation needs more guardrails, needs to be very robust before any release.
 
 Here are changes we plan to implement in the next sprint:
 * Ship the student submission + teacher review flow end to end.
 * Connect the AI helper to the evaluation service with first draft prompts.
 * Add automated integration tests for auth and classroom APIs.
+* Add group functionality with group evaluations for the AI.
