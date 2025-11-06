@@ -94,6 +94,7 @@ Follow these steps to set up and run the Virtual Teaching Assistant project:
 
 The project currently provides a solid foundation for the Virtual Teaching Assistant with the following implemented features:
 
+
 ### Available Now
 - **Backend API Health Check**: `GET /api/health/` returns server status
 - **Django Admin Interface**: Available at `http://localhost:8000/admin/` for database management
@@ -103,7 +104,11 @@ The project currently provides a solid foundation for the Virtual Teaching Assis
 
 ## Known Problems
 
-- **Missing Key Features**: We have not successfully implemented many of the key features of the app including student accounts and view, teacher accounts and dashboard, and AI chatbot functionality.
+- **AI system** - not integrated into teacher dashboard
+- **UI** - Teacher dashboard and final functionality needs to be completed
+- **UI and functionaly** - The Teacher and student portions need to get connected
+- **AI system** - needs guardrails for safety checks
+- 
 
 
 ## Contributing
