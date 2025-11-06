@@ -1,7 +1,8 @@
 from rest_framework import status, viewsets
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.decorators import api_view, permission_classes, action, parser_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from .ai_service import get_ai_service
@@ -15,7 +16,11 @@ from .serializers import (
     GradeSubmissionRequest,
     CriterionScoreSerializer
 )
-from .models import GradingSession, Rubric, AssessmentSubmission, CriterionScore
+from .models import GradingSession, Rubric, AssessmentSubmission, CriterionScore, ActivityRubricMap, RubricCriterion
+from activities.models import ScienceActivity
+from django.contrib.auth.decorators import user_passes_test
+from django.db import transaction
+import json
 
 
 @api_view(["POST"])
@@ -210,6 +215,183 @@ def health_check(request):
     })
 
 
+# --- Rubric import & mapping endpoints ---
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def rubric_mappings(request):
+    """List current activity->rubric mappings with rubric titles."""
+    mappings = ActivityRubricMap.objects.select_related("rubric").all()
+    data = [
+        {
+            "activity_code": m.activity_code,
+            "rubric_id": m.rubric.id,
+            "rubric_title": m.rubric.title,
+            "assignment_id": m.assignment_id,
+            "created_at": m.created_at,
+        }
+        for m in mappings
+    ]
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def set_rubric_mapping(request):
+    """Set or update a mapping between an activity_code and a rubric_id."""
+    if not request.user.is_staff:
+        return Response({"error": "Only staff can set mappings"}, status=status.HTTP_403_FORBIDDEN)
+
+    activity_code = request.data.get("activity_code")
+    rubric_id = request.data.get("rubric_id")
+    assignment_id = request.data.get("assignment_id", "")
+    if not activity_code or not rubric_id:
+        return Response({"error": "activity_code and rubric_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        rubric = Rubric.objects.get(id=rubric_id)
+    except Rubric.DoesNotExist:
+        return Response({"error": "Rubric not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    mapping, _ = ActivityRubricMap.objects.update_or_create(
+        activity_code=activity_code,
+        defaults={"rubric": rubric, "assignment_id": assignment_id},
+    )
+    return Response({
+        "activity_code": mapping.activity_code,
+        "rubric_id": mapping.rubric.id,
+        "rubric_title": mapping.rubric.title,
+        "assignment_id": mapping.assignment_id,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def import_rubric_upload(request):
+    """Upload a rubric JSON file and (optionally) map it to an activity_code.
+
+    Form fields:
+      - file: uploaded JSON
+      - activity_code: optional (string like '013.03-c02')
+      - user_id: optional (creator); defaults to request.user.id
+    """
+    if not request.user.is_staff:
+        return Response({"error": "Only staff can import rubrics"}, status=status.HTTP_403_FORBIDDEN)
+
+    if "file" not in request.FILES:
+        return Response({"error": "Missing file"}, status=status.HTTP_400_BAD_REQUEST)
+
+    activity_code = request.POST.get("activity_code")
+    creator = request.user
+
+    try:
+        raw = request.FILES["file"].read().decode("utf-8")
+        data = json.loads(raw)
+    except Exception as e:
+        return Response({"error": f"Invalid JSON: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Build rubric from JSON (similar to management command)
+    learning_target = data.get("learning_target", "")
+    rubric_description = learning_target
+    if "metadata" in data:
+        md = data["metadata"]
+        rubric_description += f"\n\nSource: {md.get('source_document', 'N/A')}"
+        if md.get("aligned_ngss"):
+            rubric_description += f"\nAligned to: {', '.join(md['aligned_ngss'])}"
+
+    with transaction.atomic():
+        rubric = Rubric.objects.create(
+            title=data.get("task_title", data.get("assignment_id", "Untitled Rubric")),
+            description=rubric_description,
+            total_points=data.get("max_score", 100),
+            created_by=creator,
+            is_active=True,
+        )
+
+        # Create criteria with enriched description
+        for idx, criterion_data in enumerate(data.get("criteria", [])):
+            criterion_title = criterion_data.get("title", f"Criterion {idx+1}")
+            description = criterion_title + "\n\n"
+
+            levels = criterion_data.get("levels", [])
+            if levels:
+                description += "Performance Levels:\n"
+                for level in levels:
+                    level_name = level.get("name", "Unknown")
+                    level_score = level.get("score")
+                    level_desc = level.get("description", "")
+                    if level_score is not None:
+                        description += f"• {level_name} ({level_score} pts): {level_desc}\n"
+                    else:
+                        description += f"• {level_name}: {level_desc}\n"
+                description += "\n"
+
+            examples = criterion_data.get("examples", {})
+            if examples:
+                description += "Examples:\n"
+                for k, v in examples.items():
+                    if v:
+                        description += f"• {k.title()}: {v}\n"
+                description += "\n"
+
+            auto_eval = criterion_data.get("auto_eval_rules", {})
+            if auto_eval:
+                description += "Evaluation Guidelines:\n"
+                if auto_eval.get("keywords_proficient"):
+                    description += f"Look for: {', '.join(auto_eval['keywords_proficient'])}\n"
+                if auto_eval.get("keywords_incorrect"):
+                    description += f"Avoid: {', '.join(auto_eval['keywords_incorrect'])}\n"
+                if isinstance(auto_eval.get("pattern_checks"), dict):
+                    for ck, cv in auto_eval["pattern_checks"].items():
+                        description += f"{ck}: {cv}\n"
+
+            # Determine max_points from levels or weight
+            max_points = 0
+            if levels:
+                scores = [lvl.get("score", 0) for lvl in levels if lvl.get("score") is not None]
+                if scores:
+                    max_points = max(scores)
+            if max_points == 0:
+                # Default weight if missing: split evenly across criteria (avoid div by zero)
+                criteria_count = max(len(data.get("criteria", [])), 1)
+                weight = criterion_data.get("weight", 1.0 / criteria_count)
+                max_points = int(weight * data.get("max_score", 100)) or 1
+
+            RubricCriterion.objects.create(
+                rubric=rubric,
+                name=criterion_data.get("id", criterion_title),
+                description=description.strip(),
+                max_points=max_points,
+                weight=criterion_data.get("weight", 1.0),
+                order=idx,
+            )
+
+        # Optionally create mapping
+        mapping_payload = None
+        if activity_code:
+            mapping, _ = ActivityRubricMap.objects.update_or_create(
+                activity_code=activity_code,
+                defaults={
+                    "rubric": rubric,
+                    "assignment_id": data.get("assignment_id", ""),
+                },
+            )
+            mapping_payload = {
+                "activity_code": mapping.activity_code,
+                "rubric_id": mapping.rubric.id,
+                "rubric_title": mapping.rubric.title,
+                "assignment_id": mapping.assignment_id,
+            }
+
+    return Response({
+        "message": "Rubric imported successfully",
+        "rubric_id": rubric.id,
+        "rubric_title": rubric.title,
+        "mapped": mapping_payload is not None,
+        "mapping": mapping_payload,
+    }, status=status.HTTP_201_CREATED)
+
+
 # Rubric Management ViewSet
 
 class RubricViewSet(viewsets.ModelViewSet):
@@ -302,12 +484,34 @@ class AssessmentSubmissionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_200_OK
             )
         
-        # Check if rubric is attached
+        # Ensure a rubric is attached; if missing, try to auto-map from activity_code
         if not submission.rubric:
-            return Response(
-                {"error": "No rubric attached to this submission"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            mapping = None
+            # Heuristic: submission.activity_id is an integer like 5 for codes like '005.04-c01'
+            try:
+                prefix = f"{int(submission.activity_id):03d}."
+                mapping = ActivityRubricMap.objects.select_related("rubric").filter(activity_code__startswith=prefix).first()
+            except Exception:
+                mapping = None
+
+            # Fallback: try to load ScienceActivity by any means and map via exact code
+            if not mapping:
+                try:
+                    # Prefer finding by code in the questions/context is not viable here; try DB id pk then
+                    activity = ScienceActivity.objects.filter(id=submission.activity_id).first()
+                    if activity:
+                        mapping = ActivityRubricMap.objects.select_related("rubric").filter(activity_code=activity.activity_id).first()
+                except Exception:
+                    mapping = None
+
+            if mapping:
+                submission.rubric = mapping.rubric
+                submission.save(update_fields=["rubric"]) 
+            else:
+                return Response(
+                    {"error": "No rubric attached and no mapping found for this activity"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Get AI service
         ai_service = get_ai_service()

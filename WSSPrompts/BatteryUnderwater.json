@@ -1,0 +1,95 @@
+{
+  "assignment_id": "LPC06v3_Task025_BatteryUnderwater",
+  "task_title": "Battery Underwater",
+  "learning_target": "Students develop a model of a chemical reaction that explains new substances are formed by the regrouping of atoms and that mass is conserved.",
+  "criteria": [
+    {
+      "id": "criterion_1_model_atoms_conserved",
+      "title": "Develop a model that explains atoms regroup and are conserved in chemical reactions",
+      "levels": [
+        {
+          "name": "Proficient",
+          "description": "Model shows the correct reactant (water) and product molecules (oxygen and hydrogen gas) and demonstrates that all atoms are conserved before and after the reaction."
+        },
+        {
+          "name": "Developing",
+          "description": "Model shows either the correct reactant and product molecules or that atoms are conserved, but not both."
+        },
+        {
+          "name": "Beginning",
+          "description": "Model does not show correct reactants/products or atom conservation."
+        }
+      ],
+      "auto_eval_rules": {
+        "must_include_any": ["water", "H2O", "hydrogen", "oxygen"],
+        "preferred_terms": ["atoms conserved", "same atoms", "reactant and product"],
+        "penalize_if_includes": ["disappear", "new atoms created"]
+      },
+      "examples": {
+        "proficient": "My model shows water (H2O) splitting into hydrogen gas and oxygen gas. The same number of each type of atom appears before and after the reaction.",
+        "developing": "Water turns into hydrogen and oxygen, but I didn’t label the number of atoms.",
+        "beginning": "Water molecules change into something else and some atoms disappear."
+      }
+    },
+    {
+      "id": "criterion_2_atomic_rearrangement",
+      "title": "State how a model shows atoms rearrange in a chemical reaction to produce new substances",
+      "levels": [
+        {
+          "name": "Proficient",
+          "description": "Explains that new substances (hydrogen and oxygen gas) are made from atoms of the reactant (water) and that the atoms break apart and rearrange to form new molecules."
+        },
+        {
+          "name": "Beginning",
+          "description": "Does not indicate that new substances come from rearrangement of atoms from the reactants."
+        }
+      ],
+      "auto_eval_rules": {
+        "must_include_any": ["rearrange", "regroup", "break apart", "made from atoms of water"],
+        "preferred_terms": ["new substances", "hydrogen gas", "oxygen gas"],
+        "penalize_if_includes": ["atoms destroyed", "mass lost"]
+      },
+      "examples": {
+        "proficient": "The atoms in water molecules rearrange to form new substances—hydrogen gas and oxygen gas.",
+        "beginning": "Water turns into gases but I’m not sure how the atoms change."
+      }
+    },
+    {
+      "id": "criterion_3_mass_conservation",
+      "title": "State how a model shows mass is conserved in a chemical reaction",
+      "levels": [
+        {
+          "name": "Proficient",
+          "description": "States mass is conserved and provides evidence that both sides of the reaction have the same number of each type of atom."
+        },
+        {
+          "name": "Developing",
+          "description": "States atoms are conserved but does not specify all atom types or amounts."
+        },
+        {
+          "name": "Beginning",
+          "description": "Does not state that mass or atoms are conserved."
+        }
+      ],
+      "auto_eval_rules": {
+        "must_include_any": ["mass conserved", "same number", "same atoms"],
+        "preferred_terms": ["equal atoms", "no loss of mass", "conservation"],
+        "penalize_if_includes": ["mass disappeared", "atoms lost"]
+      },
+      "examples": {
+        "proficient": "The model shows the same number of oxygen and hydrogen atoms before and after the reaction, so mass is conserved.",
+        "developing": "Mass stays the same, but I didn’t count the atoms.",
+        "beginning": "Some atoms go away so the mass changes."
+      }
+    }
+  ],
+  "metadata": {
+    "source_document": "Public Teacher Guide LPC06v3_Task025 Battery Underwater",
+    "aligned_ngss": [
+      "Develop a model",
+      "Conservation of mass",
+      "Atoms regroup to form new substances"
+    ],
+    "created_at": "2025-10-15"
+  }
+}

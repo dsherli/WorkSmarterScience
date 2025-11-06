@@ -60,12 +60,9 @@ export default function Assessment1() {
                 .filter(Boolean)
                 .join('\n\n---\n\n');
 
-            // Create submission: pick rubric based on activity
-            // Danny Makes Soap (activity_id '013.03-c02') should use imported rubric ID 6
-            const rubricId = activity_id === '013.03-c02' ? 6 : 1;
+            // Create submission without forcing a rubric; backend will auto-map via ActivityRubricMap
             const submission = await createSubmission({
                 activity_id: parseInt(activity_id),
-                rubric: rubricId, // TODO: Allow selecting rubric or auto-detect from activity (server-side mapping)
                 question_text: activity.activity_task || questions.join(' '),
                 answer_text: combinedAnswers,
                 status: 'submitted' as const,

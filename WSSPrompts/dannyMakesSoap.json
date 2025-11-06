@@ -1,0 +1,94 @@
+{
+  "assignment_id": "LPC02v3_Task013_DannyMakesSoap",
+  "task_title": "Danny Makes Soap",
+  "learning_target": "Construct a scientific explanation about whether a reaction has occurred using properties of substances before and after the substances interact.",
+  "max_score": 6,
+  "criteria": [
+    {
+      "id": "criterion_1_claim_and_evidence",
+      "title": "Makes a claim about whether a chemical reaction occurred by comparing data on the characteristic properties of substances before and after mixing",
+      "weight": 0.6,
+      "levels": [
+        {
+          "name": "Proficient",
+          "description": "Makes a claim that a chemical reaction occurred when Danny mixed and heated coconut oil and lye. Supports the claim with evidence comparing characteristic properties (melting point or density) of reactants and products. Indicates that the substances before and after are different."
+        },
+        {
+          "name": "Developing",
+          "description": "Either makes a claim that a chemical reaction occurred OR provides correct evidence comparing characteristic properties, but not both."
+        },
+        {
+          "name": "Beginning",
+          "description": "Does not make a valid claim or provides incorrect evidence (e.g., compares non-characteristic properties such as mass or volume)."
+        }
+      ],
+      "auto_eval_rules": {
+        "keywords_proficient": [
+          "chemical reaction",
+          "occurred",
+          "melting point",
+          "density",
+          "different substances",
+          "reactants",
+          "products"
+        ],
+        "keywords_incorrect": ["mass", "volume", "weight"],
+        "pattern_checks": {
+          "must_include_any": ["reaction occurred", "new substance", "different properties"],
+          "penalize_if_includes": ["mass", "volume only"]
+        }
+      },
+      "examples": {
+        "exemplar": "A chemical reaction occurred when the coconut oil and lye were mixed and heated because the melting point and density changed. These are characteristic properties, showing new substances were formed.",
+        "developing": "A chemical reaction happened because the melting points changed.",
+        "beginning": "A chemical reaction did not occur because the mass stayed the same."
+      }
+    },
+    {
+      "id": "criterion_2_reasoning",
+      "title": "States reasons why data counts as evidence using the idea of characteristic properties",
+      "weight": 0.4,
+      "levels": [
+        {
+          "name": "Proficient",
+          "description": "Explains that characteristic properties such as melting point or density can be used to determine whether the substances before and after heating are different."
+        },
+        {
+          "name": "Beginning",
+          "description": "Does not explain why characteristic properties are used OR uses non-characteristic properties (e.g., mass) as reasoning."
+        }
+      ],
+      "auto_eval_rules": {
+        "keywords_proficient": [
+          "characteristic property",
+          "melting point",
+          "density",
+          "used to identify",
+          "determine different substances"
+        ],
+        "keywords_incorrect": ["mass", "weight", "volume"],
+        "pattern_checks": {
+          "must_include_any": ["characteristic properties", "melting point", "density"],
+          "penalize_if_includes": ["mass", "weight"]
+        }
+      },
+      "examples": {
+        "exemplar": "Melting point and density are characteristic properties that can be used to identify substances and show they are different.",
+        "beginning": "Mass can be used to tell if a reaction happened because it changed."
+      }
+    }
+  ],
+  "grading_logic": {
+    "scoring_method": "additive",
+    "feedback_templates": {
+      "proficient": "Great work! You clearly explained that a chemical reaction occurred using correct evidence about characteristic properties.",
+      "developing": "You correctly identified some evidence, but remember to compare both reactants and products using characteristic properties like melting point or density.",
+      "beginning": "Your reasoning relies on non-characteristic properties (e.g., mass). Review which properties are used to identify different substances."
+    }
+  },
+  "metadata": {
+    "source_document": "Public Teacher Guide LPC02v3_Task013 Danny Makes Soap",
+    "aligned_ngss": ["Construct an Explanation", "Patterns", "Using Properties to Determine Chemical Reactions"],
+    "created_at": "2025-10-15"
+  }
+}

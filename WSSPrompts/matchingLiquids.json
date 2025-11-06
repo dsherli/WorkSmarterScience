@@ -1,0 +1,81 @@
+{
+  "assignment": "Matching unknown liquids — short-response",
+  "version": "3.0",
+  "criteria": [
+    {
+      "id": "Q1_property_identification",
+      "question": "Which information in the table would you use to tell whether any liquids could be the same substance? Explain why.",
+      "levels": [
+        {
+          "name": "Proficient",
+          "descriptor": "Clearly identifies density and boiling point as the characteristic properties used to determine if liquids are the same substance. Explains that these properties are intensive (do not depend on sample size) and avoids using mass or volume as evidence."
+        },
+        {
+          "name": "Developing",
+          "descriptor": "Identifies density and boiling point but provides limited or partial explanation. May only mention one property correctly or briefly state that mass and volume are not reliable without deeper reasoning."
+        },
+        {
+          "name": "Beginning",
+          "descriptor": "Mentions only one correct property (density or boiling point) or confuses them with non-characteristic properties like mass or volume. Shows little or no understanding of why these properties are used."
+        }
+      ],
+      "common_misconceptions": [
+        "Using mass or volume to identify a substance",
+        "Assuming heavier or larger samples mean different substances"
+      ],
+      "auto_checks": {
+        "must_include_any": ["density", "boiling point", "intensive", "characteristic"],
+        "penalize_if_includes": ["mass only", "volume only"]
+      }
+    },
+    {
+      "id": "Q2_conclusion_matching",
+      "question": "What conclusion can you make on whether any of the liquids are the same? Explain why based on the table.",
+      "levels": [
+        {
+          "name": "Proficient",
+          "descriptor": "Accurately concludes that Samples 2 and 4 are the same substance because they share both density (0.890 g/cm³) and boiling point (211 °C). Explains that Samples 1 and 3 differ due to different characteristic properties."
+        },
+        {
+          "name": "Developing",
+          "descriptor": "Correctly identifies that Samples 2 and 4 are the same but provides limited justification, referencing only one matching property (density or boiling point). May imply that 1 and 3 are different without elaboration."
+        },
+        {
+          "name": "Beginning",
+          "descriptor": "Provides incomplete or incorrect reasoning. May guess that 2 and 4 are the same without evidence, or uses mass/volume instead of characteristic properties to justify the conclusion."
+        }
+      ],
+      "expected_values": {
+        "same_pair": [2, 4],
+        "evidence": {
+          "density_g_per_cm3": 0.890,
+          "boiling_point_C": 211
+        },
+        "distinct_samples": [
+          {
+            "sample": 1,
+            "density_g_per_cm3": 1.00,
+            "boiling_point_C": 100
+          },
+          {
+            "sample": 3,
+            "density_g_per_cm3": 0.920,
+            "boiling_point_C": 300
+          }
+        ]
+      },
+      "auto_checks": {
+        "must_include_any": ["2 and 4", "two and four", "samples 2 & 4"],
+        "prefer_includes": ["0.890", "211", "same substance"]
+      }
+    }
+  ],
+  "exemplars": {
+    "Proficient_Q1": "Use the intensive properties—density and boiling point—because they are characteristic of a substance and do not depend on how much you have.",
+    "Proficient_Q2": "Samples 2 and 4 are the same substance because both have density 0.890 g/cm³ and boiling point 211 °C. Samples 1 and 3 have different properties, so they are not the same."
+  },
+  "metadata": {
+    "table_values_source": "Sample 1: 1.00 g/cm³, 100 °C; Sample 2: 0.890 g/cm³, 211 °C; Sample 3: 0.920 g/cm³, 300 °C; Sample 4: 0.890 g/cm³, 211 °C",
+    "created_at": "2025-10-15"
+  }
+}

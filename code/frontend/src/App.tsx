@@ -3,6 +3,7 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Assessment1 from "./pages/Assessment1";
+import RubricManager from "./pages/RubricManager";
 import Sidebar from "./components/Sidebar";
 import HeaderBar from "./components/HeaderBar";
 import { useAuth } from "./auth/AuthContext";
@@ -73,11 +74,7 @@ function ProtectedLayout() {
         <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 text-slate-800">
             <Sidebar />
             <div className="ml-60 flex flex-col flex-1 transition-all duration-300 ease-in-out">
-                <HeaderBar
-                    firstName={user?.first_name}
-                    lastName={user?.last_name}
-                    email={user?.email}
-                />
+                <HeaderBar />
                 <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">
                     <Outlet />
                 </main>
@@ -101,6 +98,9 @@ export default function App() {
 
                     {/* Dynamic activity route */}
                     <Route path="/assessment/:activity_id" element={<Assessment1 />} />
+
+                    {/* Rubric manager (staff-only by UX convention) */}
+                    <Route path="/rubrics/manage" element={<RubricManager />} />
                 </Route>
 
                 {/* Fallback route */}

@@ -156,3 +156,22 @@ class CriterionScore(models.Model):
     def final_points(self):
         """Return teacher points if available, otherwise AI points"""
         return self.teacher_points if self.teacher_points is not None else self.points_earned
+
+
+class ActivityRubricMap(models.Model):
+    """Map a Science Activity (by code) to a Rubric.
+
+    We use the string activity code, e.g., '013.03-c02', to avoid mismatches
+    with the integer-based Rubric.activity_id field.
+    """
+
+    activity_code = models.CharField(max_length=50, unique=True)
+    rubric = models.ForeignKey(Rubric, on_delete=models.CASCADE, related_name="activity_mappings")
+    assignment_id = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.activity_code} -> {self.rubric.title}"
