@@ -1,6 +1,6 @@
 # Sprint 2 Report (10/06/25-11/05/25)
 
-## YouTube link of Sprint 2 Video (Make this video unlisted) 
+## YouTube link of Sprint 2 Video (Make this video unlisted)
 https://youtu.be/ZUppSakyY_c
 
 ## What's New (User Facing)
