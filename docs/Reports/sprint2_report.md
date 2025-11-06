@@ -1,4 +1,4 @@
-# Sprint 2 Report (10/06/25-10/19/25)
+# Sprint 2 Report (10/06/25-11/05/25)
 ## YouTube link of Sprint 2 Video (Make this video unlisted)
 
 ## What's New (User Facing)
@@ -22,8 +22,12 @@ Over this sprint we wired the end-to-end authentication experience. Our Django a
 * [#19 – Stand up Docker-based dev environment and CI pipeline](https://github.com/dsherli/WorkSmarterScience/issues/19)
 
 ## Incomplete Issues/User Stories (TODO)
-* [#21 – Route student submissions to teachers for review](https://github.com/dsherli/WorkSmarterScience/issues/21) – Blocked on finalizing acceptance criteria for review states.
-* [#23 – Integrate AI assistant evaluation service](https://github.com/dsherli/WorkSmarterScience/issues/23) – Waiting on API credentials from vendor before wiring backend.
+* [#15 – Preparing the project for deployment with CI/CD pipelines, and Azure research/test deploy](https://github.com/dsherli/WorkSmarterScience/issues/15) – We were unsure about which platforms to use for deployment (if we had credits), and held of to make MVP before deploy.
+* [#22 – Teacher add students to group](https://github.com/dsherli/WorkSmarterScience/issues/22) – Was waiting on class creation and student join functionality, this should be done within a week.
+* [#23 - Student submission](https://github.com/dsherli/WorkSmarterScience/issues/23) – Waiting on class creation and class joining, submissions will be sent to teachers by next week.
+* [#24 - Teacher feedback](https://github.com/dsherli/WorkSmarterScience/issues/24) – Waiting on student submissions to reach teacher, this will be finished within the next two weeks.
+* [#25 - AI chatbot for assignments](https://github.com/dsherli/WorkSmarterScience/issues/25) – AI evaluation for submissions needed to be finalized first, this will be done shortly using similar prompting.
+
 
 ## Code Files for Review
 * [code/frontend/src/pages/TeacherDashboard.tsx](https://github.com/dsherli/WorkSmarterScience/blob/main/code/frontend/src/pages/TeacherDashboard.tsx)
