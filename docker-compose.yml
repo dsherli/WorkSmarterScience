@@ -3,7 +3,7 @@ services:
     build:
       context: ./code/backend
       dockerfile: Dockerfile
-    command: sh -c "python manage.py makemigrations && python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - ./code/backend:/app
     ports:

@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import { Progress } from "../components/ui/progress";
 import { Input } from "../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
@@ -19,33 +18,6 @@ import {
     Loader2
 } from "lucide-react";
 
-const mockClasses = [
-    {
-        id: 1,
-        name: "Biology 101",
-        teacher: "Dr. Anderson",
-        color: "from-blue-500 to-blue-600",
-        progress: 78,
-        nextClass: "Today, 1:00 PM"
-    },
-    {
-        id: 2,
-        name: "Chemistry 201",
-        teacher: "Mr. Rodriguez",
-        color: "from-purple-500 to-purple-600",
-        progress: 65,
-        nextClass: "Tomorrow, 10:00 AM"
-    },
-    {
-        id: 3,
-        name: "Physics 301",
-        teacher: "Ms. Chen",
-        color: "from-green-500 to-green-600",
-        progress: 82,
-        nextClass: "Wed, 2:00 PM"
-    }
-];
-
 type Assignment = {
     activity_id: string;
     activity_title: string | null;
@@ -53,6 +25,27 @@ type Assignment = {
     lp: string | null;
     lp_text: string | null;
 };
+
+type Classroom = {
+    id: number;
+    name: string;
+    description: string | null;
+    grade_level: string;
+    school: string;
+    code: string;
+    status: string;
+    term: string | null;
+    created_at: string;
+    updated_at: string;
+};
+
+const CLASS_CARD_COLORS = [
+    "from-blue-500 to-blue-600",
+    "from-purple-500 to-purple-600",
+    "from-green-500 to-green-600",
+    "from-pink-500 to-pink-600",
+    "from-orange-500 to-yellow-500",
+];
 
 const mockRecentActivity = [
     {
@@ -86,6 +79,9 @@ export function StudentDashboard() {
     const [assignments, setAssignments] = useState<Assignment[]>([]);
     const [loadingAssignments, setLoadingAssignments] = useState<boolean>(true);
     const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+    const [classes, setClasses] = useState<Classroom[]>([]);
+    const [loadingClasses, setLoadingClasses] = useState<boolean>(true);
+    const [classesError, setClassesError] = useState<string | null>(null);
     const [joinCode, setJoinCode] = useState<string>("");
     const [joiningClass, setJoiningClass] = useState<boolean>(false);
     const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
@@ -145,6 +141,86 @@ export function StudentDashboard() {
             controller.abort();
         };
     }, []);
+
+    const fetchClasses = useCallback(async () => {
+        setLoadingClasses(true);
+        setClassesError(null);
+
+        try {
+            const token = localStorage.getItem("access_token");
+
+            const makeRequest = async (accessToken?: string | null) => {
+                const headers: Record<string, string> = {};
+                if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+                return fetch("/api/classrooms/enrolled/", { headers });
+            };
+
+            let response = await makeRequest(token);
+
+            if (response.status === 401) {
+                try {
+                    await refresh();
+                    const newToken = localStorage.getItem("access_token");
+                    response = await makeRequest(newToken);
+                } catch (error) {
+                    console.warn("Failed to refresh token while loading classes", error);
+                }
+            }
+
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                const normalised = data
+                    .map((item: any): Classroom | null => {
+                        if (!item || typeof item !== "object") return null;
+
+                        const numericId =
+                            typeof item.id === "number"
+                                ? item.id
+                                : Number.isFinite(Number(item.id))
+                                    ? Number(item.id)
+                                    : null;
+
+                        if (numericId === null) return null;
+
+                        return {
+                            id: numericId,
+                            name: typeof item.name === "string" ? item.name : "Untitled class",
+                            description:
+                                typeof item.description === "string" ? item.description : null,
+                            grade_level:
+                                typeof item.grade_level === "string" ? item.grade_level : "",
+                            school: typeof item.school === "string" ? item.school : "",
+                            code: typeof item.code === "string" ? item.code : "",
+                            status: typeof item.status === "string" ? item.status : "active",
+                            term: typeof item.term === "string" ? item.term : null,
+                            created_at:
+                                typeof item.created_at === "string" ? item.created_at : "",
+                            updated_at:
+                                typeof item.updated_at === "string" ? item.updated_at : "",
+                        };
+                    })
+                    .filter(Boolean) as Classroom[];
+
+                setClasses(normalised);
+            } else {
+                setClasses([]);
+            }
+        } catch (error) {
+            console.error("Failed to load classes", error);
+            setClasses([]);
+            setClassesError("We couldn't load your classes right now.");
+        } finally {
+            setLoadingClasses(false);
+        }
+    }, [refresh]);
+
+    useEffect(() => {
+        fetchClasses();
+    }, [fetchClasses]);
 
     const handleJoinClass = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -210,6 +286,7 @@ export function StudentDashboard() {
                     : "Class joined successfully.",
             );
             setJoinCode("");
+            await fetchClasses();
         } catch (error) {
             console.error("Failed to join class", error);
             const message =
@@ -243,6 +320,16 @@ export function StudentDashboard() {
         return `You have ${assignments.length} assignments ready to explore.`;
     })();
 
+    const visibleClasses = useMemo(
+        () => classes.filter((classroom) => classroom.status !== "deleted"),
+        [classes],
+    );
+
+    const activeClassCount = useMemo(
+        () => visibleClasses.filter((classroom) => classroom.status !== "archived").length,
+        [visibleClasses],
+    );
+
     const displayName = user?.first_name
         ? `${user.first_name} ${user.last_name || ""}`
         : user?.username || "Student";
@@ -260,7 +347,7 @@ export function StudentDashboard() {
                 <StatCard
                     icon={<BookOpen className="w-5 h-5" />}
                     label="Active Classes"
-                    value={String(mockClasses.length)}
+                    value={loadingClasses ? "..." : String(activeClassCount)}
                     color="bg-blue-500"
                 />
                 <StatCard
@@ -426,32 +513,62 @@ export function StudentDashboard() {
                     </Card>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {mockClasses.map((classItem) => (
-                            <Card key={classItem.id} className="p-6 hover:shadow-lg transition-shadow">
-                                <div className={`w-full h-24 rounded-lg bg-gradient-to-br ${classItem.color} flex items-center justify-center text-white mb-4`}>
-                                    <BookOpen className="w-12 h-12" />
-                                </div>
-                                <h3 className="text-xl mb-2">{classItem.name}</h3>
-                                <p className="text-sm text-gray-600 mb-4">{classItem.teacher}</p>
-
-                                <div className="space-y-3">
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-gray-600">Overall Progress</span>
-                                            <span>{classItem.progress} percent</span>
-                                        </div>
-                                        <Progress value={classItem.progress} />
-                                    </div>
-
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                                        <Calendar className="w-4 h-4" />
-                                        Next class {classItem.nextClass}
-                                    </div>
-
-                                    <Button className="w-full">View Class</Button>
-                                </div>
+                        {loadingClasses && (
+                            <Card className="p-6 text-sm text-gray-500">
+                                Loading your classes...
                             </Card>
-                        ))}
+                        )}
+                        {!loadingClasses && classesError && (
+                            <Card className="p-6 text-sm text-red-600">
+                                {classesError}
+                            </Card>
+                        )}
+                        {!loadingClasses && !classesError && visibleClasses.length === 0 && (
+                            <Card className="p-6 text-sm text-gray-600">
+                                You aren&apos;t enrolled in any classes yet.
+                            </Card>
+                        )}
+                        {!loadingClasses &&
+                            !classesError &&
+                            visibleClasses.length > 0 &&
+                            visibleClasses.map((classItem, index) => {
+                                const color = CLASS_CARD_COLORS[index % CLASS_CARD_COLORS.length];
+                                const gradeLabel = classItem.grade_level
+                                    ? classItem.grade_level.charAt(0).toUpperCase() + classItem.grade_level.slice(1)
+                                    : "Not specified";
+
+                                return (
+                                    <Card key={classItem.id} className="p-6 hover:shadow-lg transition-shadow">
+                                        <div className={`w-full h-24 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center text-white mb-4`}>
+                                            <BookOpen className="w-12 h-12" />
+                                        </div>
+                                        <h3 className="text-xl mb-2">{classItem.name}</h3>
+                                        <div className="flex flex-wrap gap-2 mb-4 text-sm">
+                                            <Badge variant="secondary">
+                                                Status: {classItem.status === "active" ? "Active" : classItem.status}
+                                            </Badge>
+                                            {classItem.term && <Badge variant="outline">Term: {classItem.term}</Badge>}
+                                        </div>
+
+                                        <div className="space-y-3 text-sm text-gray-600">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="w-4 h-4" />
+                                                <span>{classItem.school || "School information coming soon"}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="outline">Grade: {gradeLabel}</Badge>
+                                            </div>
+                                            {classItem.description && (
+                                                <p className="text-sm text-gray-600 line-clamp-3">{classItem.description}</p>
+                                            )}
+                                        </div>
+
+                                        <Button className="w-full mt-4" variant="outline">
+                                            View Class
+                                        </Button>
+                                    </Card>
+                                );
+                            })}
                     </div>
                 </TabsContent>
 
