@@ -43,7 +43,24 @@ This project includes the following key packages and their purposes:
 - **ESLint 9.36.0** - Code linting and formatting
 - **Autoprefixer 10.4.21** - Automatic vendor prefixing for CSS
 
-### Installation Steps
+## Installation Steps
+
+### With Docker
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/dsherli/WorkSmarterScience.git
+   cd WorkSmarterScience
+   ```
+
+2. **Build with Docker**
+   ```bash
+   docker compose build
+   docker compose up
+   ```
+
+
+### Without Docker
 
 Follow these steps to set up and run the Virtual Teaching Assistant project:
 
@@ -81,8 +98,11 @@ Follow these steps to set up and run the Virtual Teaching Assistant project:
    npm run css:build
    ```
 
+
+
 **Development Notes:**
 - The backend uses SQLite database by default (no additional setup required)
+- We are using a Neon DB for our configuiration
 - CORS is configured to allow all origins in development (will need to be tightened for production)
 - Both servers need to run simultaneously for full functionality
 - Frontend hot-reloads automatically when you make changes
@@ -94,16 +114,21 @@ Follow these steps to set up and run the Virtual Teaching Assistant project:
 
 The project currently provides a solid foundation for the Virtual Teaching Assistant with the following implemented features:
 
+
 ### Available Now
 - **Backend API Health Check**: `GET /api/health/` returns server status
-- **Django Admin Interface**: Available at `http://localhost:8000/admin/` for database management
+- **Django Admin Interface**: Available at `http://localhost:8000/admin/` for database         management
 - **React Development Environment**: Hot-reloading frontend with TypeScript and Tailwind CSS
 - **CORS Configuration**: Backend configured to accept requests from frontend development server
 
 
 ## Known Problems
 
-- **Missing Key Features**: We have not successfully implemented many of the key features of the app including student accounts and view, teacher accounts and dashboard, and AI chatbot functionality.
+- **AI system** - not integrated into teacher dashboard
+- **UI** - Teacher dashboard and final functionality needs to be completed
+- **UI and functionaly** - The Teacher and student portions need to get connected
+- **AI system** - needs guardrails for safety checks
+- **teacher** - add ways to group students
 
 
 ## Contributing
