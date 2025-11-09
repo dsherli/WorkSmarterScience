@@ -1,5 +1,11 @@
 # Sprint 2 Report (10/06/25-11/05/25)
+<<<<<<< HEAD
 ## YouTube link of Sprint 2 Video (Make this video unlisted)
+=======
+
+## YouTube link of Sprint 2 Video (Make this video unlisted)
+https://youtu.be/ZUppSakyY_c
+>>>>>>> origin/main
 
 ## What's New (User Facing)
 * Launched role-aware JWT login and registration so teachers and students can access personalized dashboards.
