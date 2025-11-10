@@ -5,7 +5,25 @@ import random
 import string
 
 
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Classroom.created_by.field.related_model
+        fields = ["id", "username", "first_name", "last_name", "email"]
+        read_only_fields = ["id", "username", "first_name", "last_name", "email"]
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    student = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Enrollment
+        fields = ["id", "student", "joined_at"]
+        read_only_fields = ["id", "student", "joined_at"]
+
+
 class ClassroomSerializer(serializers.ModelSerializer):
+    enrollments = EnrollmentSerializer(many=True, read_only=True)
+
     class Meta:
         model = Classroom
         fields = [
@@ -43,15 +61,6 @@ class ClassroomSerializer(serializers.ModelSerializer):
         validated_data["term"] = validated_data.get("term", "")
 
         return super().create(validated_data)
-
-
-class EnrollmentSerializer(serializers.ModelSerializer):
-    student = serializers.PrimaryKeyRelatedField(read_only=True)
-
-    class Meta:
-        model = Enrollment
-        fields = ["id", "student", "joined_at"]
-        read_only_fields = ["id", "student", "joined_at"]
 
 
 class EnrollmentJoinSerializer(serializers.ModelSerializer):

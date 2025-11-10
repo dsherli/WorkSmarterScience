@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import type { Classroom, Student, Enrollment } from './types';
 
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -9,14 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
-import { Calendar as CalendarComponent } from '../components/ui/calendar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 
-import ReactDatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 import {
@@ -41,39 +37,12 @@ import {
     ChevronRight,
 } from 'lucide-react';
 
-function StudentRow({ student }: { student: any }) {
+function StudentRow({ student }: { student: Student }) {
     return (
         <TableRow>
-            <TableCell>{student.name}</TableCell>
+            <TableCell>{student.first_name} {student.last_name}</TableCell>
             <TableCell className="text-gray-600">{student.email}</TableCell>
             <TableCell>
-                <div className="flex items-center gap-2">
-                    <span>
-                        {student.completedActivities}/{student.totalActivities}
-                    </span>
-                    <Progress
-                        value={(student.completedActivities / student.totalActivities) * 100}
-                        className="w-20 h-2"
-                    />
-                </div>
-            </TableCell>
-            <TableCell>
-                <Badge variant="outline" className="bg-gradient-to-r from-teal-50 to-cyan-50">
-                    {student.avgScore}%
-                </Badge>
-            </TableCell>
-            <TableCell>
-                <span
-                    className={
-                        student.engagement >= 90
-                            ? 'text-green-600'
-                            : student.engagement >= 70
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
-                    }
-                >
-                    {student.engagement}%
-                </span>
             </TableCell>
         </TableRow>
     );
@@ -83,7 +52,7 @@ export default function ClassroomPage() {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const [classroom, setClassroom] = useState<any>(null);
+    const [classroom, setClassroom] = useState<Classroom | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [copiedCode, setCopiedCode] = useState(false);
 
@@ -117,12 +86,6 @@ export default function ClassroomPage() {
         { id: 'A1', title: 'Genetics Worksheet', status: 'active', dueDate: '2025-11-10', submitted: 3, total: 5, avgScore: 88 },
         { id: 'A2', title: 'Microscope Lab', status: 'completed', dueDate: '2025-10-31', submitted: 5, total: 5, avgScore: 91 },
         { id: 'A3', title: 'Ecology Poster Project', status: 'active', dueDate: '2025-11-20', submitted: 2, total: 5, avgScore: 79 },
-    ];
-
-    const mockStudents = [
-        { id: '1', name: 'Emma Johnson', email: 'emma.j@school.edu', completedActivities: 4, totalActivities: 5, avgScore: 92, engagement: 95 },
-        { id: '2', name: 'Liam Smith', email: 'liam.s@school.edu', completedActivities: 5, totalActivities: 5, avgScore: 88, engagement: 100 },
-        { id: '3', name: 'Olivia Brown', email: 'olivia.b@school.edu', completedActivities: 3, totalActivities: 5, avgScore: 85, engagement: 78 },
     ];
 
     useEffect(() => {
@@ -167,7 +130,7 @@ export default function ClassroomPage() {
                 });
 
                 if (res.ok) {
-                    const data = await res.json();
+                    const data: Classroom = await res.json();
                     setClassroom(data);
                 } else {
                     toast.error('Failed to fetch classroom');
@@ -303,7 +266,7 @@ export default function ClassroomPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600">Students</p>
-                                    <p className="text-2xl">{mockClassroom.studentCount}</p>
+                                    <p className="text-2xl">{classroom.enrollments.length}</p>
                                 </div>
                             </div>
 
@@ -423,16 +386,21 @@ export default function ClassroomPage() {
                                     <TableRow>
                                         <TableHead>Name</TableHead>
                                         <TableHead>Email</TableHead>
-                                        <TableHead>Completed</TableHead>
-                                        <TableHead>Avg Score</TableHead>
-                                        <TableHead>Engagement</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {mockStudents.map((student) => (
-                                        <StudentRow key={student.id} student={student} />
-                                    ))}
+                                    {classroom.enrollments.map((enrollment: Enrollment) => {
+                                        const student = enrollment.student;
+                                        return (
+                                            <TableRow key={enrollment.id}>
+                                                <TableCell>{`${student.first_name} ${student.last_name}`.trim() || student.username}</TableCell>
+                                                <TableCell>{student.email}</TableCell>
+                                                {/* add other metrics when available */}
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
+
                             </Table>
                         </Card>
                     </TabsContent>
@@ -548,8 +516,8 @@ export default function ClassroomPage() {
                                             <Card
                                                 key={category.id}
                                                 className={`p-6 cursor-pointer transition-all hover:shadow-lg border-2 ${selectedCategory === category.id
-                                                        ? 'border-teal-500 bg-gradient-to-br ' + category.bg
-                                                        : 'border-transparent bg-white'
+                                                    ? 'border-teal-500 bg-gradient-to-br ' + category.bg
+                                                    : 'border-transparent bg-white'
                                                     }`}
                                                 onClick={() => handleCategorySelect(category.id)}
                                             >
@@ -596,8 +564,8 @@ export default function ClassroomPage() {
                                                 <Card
                                                     key={activity.activity_id || activity.id}
                                                     className={`p-4 cursor-pointer transition-all hover:shadow-md border-2 ${selectedActivity === String(activity.activity_id || activity.id)
-                                                            ? 'border-teal-500 bg-gradient-to-r from-teal-50 to-cyan-50'
-                                                            : 'border-transparent bg-white hover:bg-gray-50'
+                                                        ? 'border-teal-500 bg-gradient-to-r from-teal-50 to-cyan-50'
+                                                        : 'border-transparent bg-white hover:bg-gray-50'
                                                         }`}
                                                     onClick={() =>
                                                         handleActivitySelect(String(activity.activity_id || activity.id))
@@ -822,8 +790,8 @@ export default function ClassroomPage() {
                                                                     }))
                                                                 }
                                                                 className={`flex-1 h-16 rounded-lg transition-all flex items-center justify-center ${dueTime.period === 'AM'
-                                                                        ? 'bg-teal-600 text-white scale-105 shadow-md'
-                                                                        : 'bg-white border-2 border-cyan-200 text-gray-600 hover:border-cyan-300'
+                                                                    ? 'bg-teal-600 text-white scale-105 shadow-md'
+                                                                    : 'bg-white border-2 border-cyan-200 text-gray-600 hover:border-cyan-300'
                                                                     }`}
                                                             >
                                                                 AM
@@ -837,8 +805,8 @@ export default function ClassroomPage() {
                                                                     }))
                                                                 }
                                                                 className={`flex-1 h-16 rounded-lg transition-all flex items-center justify-center ${dueTime.period === 'PM'
-                                                                        ? 'bg-teal-600 text-white scale-105 shadow-md'
-                                                                        : 'bg-white border-2 border-cyan-200 text-gray-600 hover:border-cyan-300'
+                                                                    ? 'bg-teal-600 text-white scale-105 shadow-md'
+                                                                    : 'bg-white border-2 border-cyan-200 text-gray-600 hover:border-cyan-300'
                                                                     }`}
                                                             >
                                                                 PM
