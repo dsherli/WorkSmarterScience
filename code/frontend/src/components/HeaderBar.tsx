@@ -29,7 +29,6 @@ export default function HeaderBar() {
             });
             window.location.href = "/login";
         } catch (err) {
-            console.error("Logout error:", err);
             window.location.href = "/login";
         }
     }

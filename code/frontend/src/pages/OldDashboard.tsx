@@ -24,7 +24,6 @@ export default function Dashboard() {
                 setUser(userData);
                 setActivities(activityData);
             } catch (error) {
-                console.error("Error fetching dashboard data:", error);
             } finally {
                 setLoading(false);
             }

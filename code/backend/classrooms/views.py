@@ -14,6 +14,9 @@ class ClassroomListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Classroom.objects.filter(created_by=self.request.user)
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Classroom.objects.all()

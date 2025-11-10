@@ -1,6 +1,7 @@
 ﻿import { useAuth } from "../auth/AuthContext";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Card } from "../components/ui/card";
@@ -50,7 +51,7 @@ const editClassroomSchema = z.object({
 const mockActivities = [
     {
         id: 1,
-        title: "Cell Structure and Function Quiz",
+        title: "Cell Structure and Function Quiz (Mock)",
         classroom: "Biology 101",
         submitted: 24,
         total: 28,
@@ -59,18 +60,8 @@ const mockActivities = [
         status: "open"
     },
     {
-        id: 2,
-        title: "Photosynthesis Lab Report",
-        classroom: "Biology 101",
-        submitted: 18,
-        total: 28,
-        needsReview: 12,
-        dueDate: "Tomorrow",
-        status: "open"
-    },
-    {
         id: 3,
-        title: "Chemical Reactions Worksheet",
+        title: "Chemical Reactions Worksheet (Mock)",
         classroom: "Chemistry 201",
         submitted: 24,
         total: 24,
@@ -84,14 +75,14 @@ const mockRecentFeedback = [
     {
         id: 1,
         student: "Emma Johnson",
-        activity: "Cell Structure Quiz",
+        activity: "Cell Structure Quiz (Mock)",
         aiScore: 85,
         status: "pending"
     },
     {
         id: 2,
         student: "Liam Smith",
-        activity: "Photosynthesis Lab",
+        activity: "Photosynthesis Lab (Mock)",
         aiScore: 92,
         status: "pending"
     },
@@ -110,6 +101,9 @@ export function TeacherDashboard() {
     const [deleteClassroomId, setDeleteClassroomId] = useState<number | null>(null);
     const [editClassroom, setEditClassroom] = useState<any>(null);
     const [isEditClassroomOpen, setIsEditClassroomOpen] = useState(false);
+    const [currentView, setCurrentView] = useState<'dashboard' | 'classroom' | 'activity'>('dashboard');
+    const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
+    const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
     const colors = [
         "from-blue-500 to-blue-600",
@@ -190,7 +184,9 @@ export function TeacherDashboard() {
             name: values.name,
             grade_level: values.gradeLevel,
             school: values.school,
-            description: values.description || ""
+            description: values.description || "",
+            status: "active",
+            term: ""
         });
 
         const headers = {
@@ -209,14 +205,13 @@ export function TeacherDashboard() {
 
             if (response.ok) {
                 toast.success("Classroom created successfully!");
-
                 form.reset();
                 setIsCreateClassroomOpen(false);
                 await fetchClassrooms();
-
                 setActiveTab("classrooms");
+                navigate("/dashboard/classrooms");
             } else {
-                toast.error(`Failed: ${data?.detail || response.status}`);
+                toast.error(`Failed: ${data?.detail || JSON.stringify(data)}`);
             }
         } catch (error) {
             toast.error("Network error");
@@ -231,6 +226,23 @@ export function TeacherDashboard() {
             description: classroom.description || "",
         });
         setIsEditClassroomOpen(true);
+    };
+
+    const navigate = useNavigate();
+
+    const handleViewClassroom = (classroomId: number) => {
+        navigate(`/dashboard/classroom/${classroomId}`);
+    };
+
+    const handleViewActivity = (activityId: string) => {
+        setSelectedActivityId(activityId);
+        setCurrentView('activity');
+    };
+
+    const handleBackToDashboard = () => {
+        setCurrentView('dashboard');
+        setSelectedClassroomId(null);
+        setSelectedActivityId(null);
     };
 
     const handleEditClassroom = async (values: z.infer<typeof editClassroomSchema>) => {
@@ -313,7 +325,7 @@ export function TeacherDashboard() {
     };
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="min-h-[calc(100vh-4rem)] w-full bg-gray-50 p-[50px] space-y-6">
             {/* Header */}
             <div>
                 <h1 className="text-3xl mb-2">Welcome back, {displayName}</h1>
@@ -325,28 +337,28 @@ export function TeacherDashboard() {
                 <StatCard
                     icon={<Users className="w-5 h-5" />}
                     label="Total Students"
-                    value="100"
+                    value="100 (Mock)"
                     change="+4 this week"
                     color="bg-blue-500"
                 />
                 <StatCard
                     icon={<BookOpen className="w-5 h-5" />}
                     label="Active Activities"
-                    value="10"
+                    value="10 (Mock)"
                     change="3 due today"
                     color="bg-purple-500"
                 />
                 <StatCard
                     icon={<CheckCircle2 className="w-5 h-5" />}
                     label="Avg Completion"
-                    value="87%"
+                    value="87% (Mock)"
                     change="+5 percent from last week"
                     color="bg-green-500"
                 />
                 <StatCard
                     icon={<MessageSquare className="w-5 h-5" />}
                     label="AI Interactions"
-                    value="234"
+                    value="234 (Mock)"
                     change="Today"
                     color="bg-orange-500"
                 />
@@ -366,7 +378,7 @@ export function TeacherDashboard() {
                         {/* Recent Activities */}
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl">Recent Activities</h2>
+                                <h2 className="text-xl">Recent Activities (Mock 11-04-25)</h2>
                                 <Button size="sm" variant="ghost">View All</Button>
                             </div>
                             <div className="space-y-3">
@@ -379,7 +391,7 @@ export function TeacherDashboard() {
                         {/* Pending Reviews */}
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl">Pending Reviews</h2>
+                                <h2 className="text-xl">Pending Reviews (Mock 11-04-25)</h2>
                                 <Button size="sm" variant="ghost">View All</Button>
                             </div>
                             <div className="space-y-3">
@@ -497,7 +509,13 @@ export function TeacherDashboard() {
                                     </div>
 
                                     <div className="flex gap-2">
-                                        <Button size="sm" className="flex-1">View Classroom</Button>
+                                        <Button
+                                            size="sm"
+                                            className="flex-1"
+                                            onClick={() => handleViewClassroom(classroom.id)}
+                                        >
+                                            View Classroom
+                                        </Button>
                                         <Button
                                             size="sm"
                                             variant="outline"

@@ -16,6 +16,7 @@ NO_STORE = {
 
 
 def _has_field(model, name: str) -> bool:
+    """Check if a given field exists on the model."""
     return any(getattr(f, "name", None) == name for f in model._meta.get_fields())
 
 
@@ -23,6 +24,7 @@ def _has_field(model, name: str) -> bool:
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def csrf_token(request):
+    """Return a valid CSRF token for frontend requests."""
     return JsonResponse({"csrfToken": get_token(request)})
 
 
@@ -32,6 +34,7 @@ def csrf_token(request):
 def register_view(request):
     """
     Accepts: {username, email, password, first_name?, last_name?, role?}
+    Returns: {user, access, refresh}
     """
     username = request.data.get("username")
     email = request.data.get("email")
@@ -50,7 +53,7 @@ def register_view(request):
     dup_username = User.objects.filter(username__iexact=username).exists()
     dup_email = User.objects.filter(email__iexact=email).exists()
 
-    # ---------------------------------------------------------------- debug
+    # Debug
     print(
         "[REGISTER DEBUG]",
         {
@@ -87,7 +90,6 @@ def register_view(request):
             create_kwargs["role"] = role
 
         user = User.objects.create_user(**create_kwargs)
-
         resp_role = getattr(user, "role", role)
 
         refresh = RefreshToken.for_user(user)
@@ -121,6 +123,7 @@ def register_view(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login_view(request):
+    """JWT-based login endpoint."""
     username = request.data.get("username")
     password = request.data.get("password")
 
@@ -162,6 +165,7 @@ def login_view(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def current_user(request):
+    """Return basic info for the authenticated user."""
     user = request.user
     return Response(
         {

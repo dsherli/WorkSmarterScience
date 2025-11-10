@@ -6,6 +6,7 @@ import StudentDashboard from "./StudentDashboard";
 
 export default function Dashboard() {
     const { user, logout } = useAuth();
+
     const location = useLocation();
 
     if (!user) return null;
@@ -14,6 +15,7 @@ export default function Dashboard() {
 
     return (
         <DashboardLayout>
+            {/* teacher or student */}
             {isRootDashboard ? (
                 user.role === "teacher" ? (
                     <TeacherDashboard />

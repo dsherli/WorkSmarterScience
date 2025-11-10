@@ -1,13 +1,11 @@
 asgiref==3.10.0
+dj-database-url==3.0.1
 Django==5.2.7
-django-cors-headers==4.9.0
+django-cors-headers==4.3.1
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
-pillow==11.3.0
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.9
 PyJWT==2.10.1
-python-dotenv==1.1.1
+python-dotenv==1.2.1
 sqlparse==0.5.3
 typing_extensions==4.15.0
-dj_database_url==1.2.0
-dotenv==0.9.9

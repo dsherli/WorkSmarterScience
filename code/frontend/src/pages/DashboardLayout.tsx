@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const teacherNavItems = [
         { icon: LayoutDashboard, label: "Dashboard", page: "" },
-        { icon: BookOpen, label: "Classrooms", page: "classrooms" },
+        { icon: BookOpen, label: "My Classrooms", page: "classrooms" },
         { icon: Activity, label: "Activity Library", page: "activity-library" },
         { icon: Users, label: "Students", page: "students" },
         { icon: MessageSquare, label: "AI Insights", page: "ai-insights" }
@@ -52,7 +52,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         : "US";
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen">
             {/* Top Navigation */}
             <nav className="bg-white border-b sticky top-0 z-40">
                 <div className="px-4 sm:px-6 lg:px-8">
@@ -126,7 +126,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             return (
                                 <button
                                     key={index}
-                                    onClick={() => navigate(fullPath)}
+                                    onClick={() => {
+                                        navigate(fullPath);
+                                        if (location.pathname === fullPath) {
+                                            navigate(0);
+                                        }
+                                    }}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                                             ? "bg-gradient-to-r from-teal-50 to-cyan-50 text-teal-700 border border-teal-200"
                                             : "hover:bg-gray-50 text-gray-700"
@@ -160,8 +165,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </aside>
 
                 {/* Main Content */}
-                <main className="flex-1 min-h-[calc(100vh-4rem)] lg:ml-0">
-                    <div className="max-w-7xl mx-auto">{children}</div>
+                <main className="flex-1 min-h-[calc(100vh-4rem)] lg:ml-0 overflow-y-auto">
+                    {children}
                 </main>
             </div>
 
