@@ -5,6 +5,60 @@ from rest_framework.response import Response
 from .models import ScienceActivity
 
 
+def _parse_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"true", "1", "yes", "y", "t"}:
+        return True
+    if normalized in {"false", "0", "no", "n", "f"}:
+        return False
+    return None
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_science_activities(request):
+    """
+    Return a lightweight list of science activities for dashboards/library views.
+    Optional query params:
+      - released: bool (filter by published status)
+      - category: str (filter by NGSS category)
+    """
+    try:
+        released_filter = _parse_bool(request.GET.get("released"))
+        category = (request.GET.get("category") or "").strip()
+
+        query = ScienceActivity.objects.all()
+        if released_filter is True:
+            query = query.filter(is_released=True)
+        elif released_filter is False:
+            query = query.filter(is_released=False)
+
+        if category:
+            query = query.filter(category__iexact=category)
+
+        activities = list(
+            query.order_by("-created_at", "activity_title").values(
+                "activity_id",
+                "activity_title",
+                "pe",
+                "lp",
+                "lp_text",
+                "category",
+                "tags",
+                "version",
+                "is_released",
+                "created_at",
+                "updated_at",
+            )
+        )
+
+        return Response(activities, status=200)
+    except Exception as exc:
+        return Response({"error": str(exc)}, status=500)
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_science_activity(request, activity_id):
