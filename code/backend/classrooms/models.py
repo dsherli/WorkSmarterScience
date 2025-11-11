@@ -54,3 +54,16 @@ class Enrollment(models.Model):
     class Meta:
         unique_together = ("classroom", "student")
         db_table = "classroom_enrollment"
+
+
+class ClassroomActivity(models.Model):
+    classroom = models.ForeignKey(
+        Classroom, related_name="activities", on_delete=models.CASCADE
+    )
+    activity_id = models.CharField(max_length=50)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    due_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ("classroom", "activity_id")
+        db_table = "classroom_activity"
