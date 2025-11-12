@@ -19,11 +19,16 @@ import {
 } from "lucide-react";
 
 type Assignment = {
+    id: number;
     activity_id: string;
     activity_title: string | null;
     pe: string | null;
     lp: string | null;
     lp_text: string | null;
+    due_at: string | null;
+    status: string;
+    assigned_at: string | null;
+    classroom: { id: number; name: string } | null;
 };
 
 type Classroom = {
@@ -95,8 +100,16 @@ export function StudentDashboard() {
             setAssignmentsError(null);
 
             try {
-                const response = await fetch("/api/activities/", {
+                const token = localStorage.getItem("access_token");
+                if (!token) {
+                    throw new Error("You must be signed in to view assignments");
+                }
+
+                const response = await fetch("/api/classrooms/assignments/", {
                     signal: controller.signal,
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
                 });
 
                 if (!response.ok) {
@@ -107,6 +120,7 @@ export function StudentDashboard() {
                 if (Array.isArray(data)) {
                     const normalised = data
                         .map((item: any): Assignment => ({
+                            id: typeof item.id === "number" ? item.id : Number(item.id || 0),
                             activity_id:
                                 typeof item.activity_id === "string" ? item.activity_id : "",
                             activity_title:
@@ -116,6 +130,17 @@ export function StudentDashboard() {
                             pe: typeof item.pe === "string" ? item.pe : null,
                             lp: typeof item.lp === "string" ? item.lp : null,
                             lp_text: typeof item.lp_text === "string" ? item.lp_text : null,
+                            due_at: typeof item.due_at === "string" ? item.due_at : null,
+                            status: typeof item.status === "string" ? item.status : "assigned",
+                            assigned_at:
+                                typeof item.assigned_at === "string" ? item.assigned_at : null,
+                            classroom:
+                                item.classroom && typeof item.classroom === "object"
+                                    ? {
+                                        id: Number(item.classroom.id),
+                                        name: String(item.classroom.name),
+                                    }
+                                    : null,
                         }))
                         .filter((item) => item.activity_id !== "");
 
@@ -127,7 +152,9 @@ export function StudentDashboard() {
                 if (controller.signal.aborted) return;
                 console.error("Failed to load assignments", error);
                 setAssignments([]);
-                setAssignmentsError("We couldn't load your assignments. Please try again.");
+                setAssignmentsError(
+                    error instanceof Error ? error.message : "We couldn't load your assignments. Please try again."
+                );
             } finally {
                 if (!controller.signal.aborted) {
                     setLoadingAssignments(false);
@@ -140,6 +167,20 @@ export function StudentDashboard() {
         return () => {
             controller.abort();
         };
+    }, []);
+
+    const formatDueDate = useCallback((value: string | null) => {
+        if (!value) return "No due date";
+        try {
+            return new Date(value).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+            });
+        } catch {
+            return value;
+        }
     }, []);
 
     const fetchClasses = useCallback(async () => {
@@ -297,7 +338,14 @@ export function StudentDashboard() {
         }
     };
 
-    const upcomingAssignments = assignments.slice(0, 3);
+    const upcomingAssignments = assignments
+        .slice()
+        .sort((a, b) => {
+            const aDate = a.due_at ? new Date(a.due_at).getTime() : Infinity;
+            const bDate = b.due_at ? new Date(b.due_at).getTime() : Infinity;
+            return aDate - bDate;
+        })
+        .slice(0, 3);
     const uniquePeCount = useMemo(() => {
         const set = new Set<string>();
         assignments.forEach((assignment) => {
@@ -408,7 +456,7 @@ export function StudentDashboard() {
                                     !assignmentsError &&
                                     upcomingAssignments.map((assignment) => (
                                         <div
-                                            key={assignment.activity_id}
+                                            key={assignment.id || assignment.activity_id}
                                             className="p-3 border rounded-lg hover:border-blue-500 transition-colors"
                                         >
                                             <div className="flex items-start justify-between mb-2 gap-3">
@@ -420,6 +468,12 @@ export function StudentDashboard() {
                                                         {assignment.pe
                                                             ? `PE: ${assignment.pe}`
                                                             : "Performance expectation coming soon"}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        {assignment.classroom?.name && (
+                                                            <span>{assignment.classroom.name} • </span>
+                                                        )}
+                                                        {formatDueDate(assignment.due_at)}
                                                     </p>
                                                 </div>
                                                 {assignment.lp && (
@@ -590,7 +644,7 @@ export function StudentDashboard() {
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                 {assignments.map((assignment) => (
                                     <Card
-                                        key={assignment.activity_id}
+                                        key={assignment.id || assignment.activity_id}
                                         className="p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
                                     >
                                         <div className="flex items-start justify-between gap-3">
@@ -607,6 +661,12 @@ export function StudentDashboard() {
                                                         <Badge variant="outline">LP {assignment.lp}</Badge>
                                                     )}
                                                 </div>
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    {assignment.classroom?.name && (
+                                                        <span>{assignment.classroom.name} • </span>
+                                                    )}
+                                                    {formatDueDate(assignment.due_at)}
+                                                </p>
                                             </div>
                                         </div>
                                         {assignment.lp_text && (

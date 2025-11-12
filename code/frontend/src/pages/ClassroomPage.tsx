@@ -65,6 +65,7 @@ export default function ClassroomPage() {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [dueTime, setDueTime] = useState({ hour: '11', minute: '59', period: 'PM' });
+    const [assigningActivity, setAssigningActivity] = useState(false);
     const [categoryCounts, setCategoryCounts] = useState<{ [key: string]: number }>({});
     const [dueDateParts, setDueDateParts] = useState({
         month: '',
@@ -99,7 +100,30 @@ export default function ClassroomPage() {
             .catch((err) => console.error('Failed to fetch activities', err));
     }, [selectedCategory]);
 
-    const handleAddActivity = () => {
+    const buildDueDateIso = () => {
+        if (!dueDate) return null;
+        let hour = parseInt(dueTime.hour, 10);
+        if (Number.isNaN(hour)) {
+            hour = 0;
+        }
+        if (dueTime.period === 'PM' && hour < 12) {
+            hour += 12;
+        }
+        if (dueTime.period === 'AM' && hour === 12) {
+            hour = 0;
+        }
+        const minute = dueTime.minute || '00';
+        const formattedHour = String(hour).padStart(2, '0');
+        const formattedMinute = String(minute).padStart(2, '0');
+        const dateTimeString = `${dueDate}T${formattedHour}:${formattedMinute}:00`;
+        const dateObject = new Date(dateTimeString);
+        if (Number.isNaN(dateObject.getTime())) {
+            return null;
+        }
+        return dateObject.toISOString();
+    };
+
+    const handleAddActivity = async () => {
         if (!selectedActivity) {
             toast.error('Please select an activity first');
             return;
@@ -110,9 +134,60 @@ export default function ClassroomPage() {
             return;
         }
 
-        toast.success(`Added "${selectedActivity}" to this classroom`);
-        setSelectedActivity('');
-        setShowAddModal(false);
+        const activityId = selectedActivityData?.activity_id || selectedActivity;
+        const isoDueAt = buildDueDateIso();
+
+        if (!activityId) {
+            toast.error('Unable to determine the selected activity');
+            return;
+        }
+
+        if (!isoDueAt) {
+            toast.error('Please provide a valid due date and time');
+            return;
+        }
+
+        const token = localStorage.getItem('access_token');
+        if (!token || !classroom) {
+            toast.error('Not authenticated');
+            return;
+        }
+
+        setAssigningActivity(true);
+
+        try {
+            const response = await fetch(`/api/classrooms/${classroom.id}/activities/assign/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    activity_id: activityId,
+                    due_at: isoDueAt,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message =
+                    errorData?.detail ||
+                    errorData?.non_field_errors?.[0] ||
+                    'Failed to assign activity';
+                throw new Error(message);
+            }
+
+            toast.success('Activity assigned to classroom');
+            setSelectedActivity('');
+            setShowAddModal(false);
+            setDueDate('');
+            setDueDateParts({ month: '', day: '', year: '' });
+        } catch (error) {
+            console.error(error);
+            toast.error(error instanceof Error ? error.message : 'Failed to assign activity');
+        } finally {
+            setAssigningActivity(false);
+        }
     };
 
     useEffect(() => {
@@ -861,10 +936,10 @@ export default function ClassroomPage() {
                             {step === 'date' && (
                                 <Button
                                     onClick={handleAddActivity}
-                                    disabled={!dueDate}
+                                    disabled={!dueDate || assigningActivity}
                                     className="bg-teal-600 hover:bg-teal-700 text-white"
                                 >
-                                    Add to Classroom
+                                    {assigningActivity ? 'Assigning...' : 'Add to Classroom'}
                                 </Button>
                             )}
                         </DialogFooter>

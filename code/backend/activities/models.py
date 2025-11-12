@@ -58,6 +58,10 @@ class ScienceActivityImages(models.Model):
     media_type = models.CharField(max_length=20, default="image")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        db_table = '"public"."science_activity_images"'
+        managed = False
+
 
 @receiver(pre_save, sender=ScienceActivity)
 def update_version_and_timestamp(sender, instance, **kwargs):
@@ -70,12 +74,16 @@ def update_version_and_timestamp(sender, instance, **kwargs):
         old_instance = ScienceActivity.objects.get(pk=instance.pk)
 
         fields_to_check = [
-            "activity_title", "activity_task",
-            "pe", "lp", "lp_text", "category", "tags"
+            "activity_title",
+            "activity_task",
+            "pe",
+            "lp",
+            "lp_text",
+            "category",
+            "tags",
         ]
         if any(
-            getattr(instance, f) != getattr(old_instance, f)
-            for f in fields_to_check
+            getattr(instance, f) != getattr(old_instance, f) for f in fields_to_check
         ):
             instance.version = round(old_instance.version + 0.1, 1)
     except ScienceActivity.DoesNotExist:

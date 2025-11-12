@@ -19,6 +19,7 @@ import {
     SelectValue,
 } from "../components/ui/select";
 import { Label } from "../components/ui/label";
+import { Input } from "../components/ui/input";
 import { toast } from "sonner";
 import { Plus, FlaskConical, Leaf, Earth, Wrench } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
@@ -47,6 +48,8 @@ export default function ActivityDashboard() {
     const [classrooms, setClassrooms] = useState<any[]>([]);
     const [selectedActivity, setSelectedActivity] = useState<ActivitySummary | null>(null);
     const [selectedClassroom, setSelectedClassroom] = useState<string>("");
+    const [selectedDueDate, setSelectedDueDate] = useState<string>("");
+    const [assigning, setAssigning] = useState<boolean>(false);
     const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
 
     // preview
@@ -132,15 +135,58 @@ export default function ActivityDashboard() {
             return;
         }
 
+        if (!selectedDueDate) {
+            toast.error("Please select a due date");
+            return;
+        }
+
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+            toast.error("You must be signed in to assign activities");
+            return;
+        }
+
         const classroom = classrooms.find(
             (c) => c.id.toString() === selectedClassroom
         );
-        toast.success("Activity added successfully!", {
-            description: `${selectedActivity?.activity_title} has been added to ${classroom?.name}`,
-        });
 
-        setSelectedActivity(null);
-        setSelectedClassroom("");
+        setAssigning(true);
+        const payload: Record<string, any> = {
+            activity_id: selectedActivity.activity_id,
+            due_at: new Date(selectedDueDate).toISOString(),
+        };
+
+        fetch(`/api/classrooms/${selectedClassroom}/activities/assign/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        })
+            .then(async (res) => {
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    const message =
+                        err?.detail ||
+                        err?.non_field_errors?.[0] ||
+                        "Failed to assign activity";
+                    throw new Error(message);
+                }
+                return res.json();
+            })
+            .then(() => {
+                toast.success("Activity added successfully!", {
+                    description: `${selectedActivity?.activity_title} has been added to ${classroom?.name}`,
+                });
+                setSelectedActivity(null);
+                setSelectedClassroom("");
+                setSelectedDueDate("");
+            })
+            .catch((error: Error) => {
+                toast.error(error.message);
+            })
+            .finally(() => setAssigning(false));
     };
 
     const handleFilterClick = (filter: string) => {
@@ -387,7 +433,13 @@ export default function ActivityDashboard() {
             {isTeacher && (
                 <Dialog
                     open={!!selectedActivity}
-                    onOpenChange={() => setSelectedActivity(null)}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setSelectedActivity(null);
+                            setSelectedClassroom("");
+                            setSelectedDueDate("");
+                        }
+                    }}
                 >
                     <DialogContent className="sm:max-w-[500px] bg-white">
                         <DialogHeader>
@@ -427,6 +479,22 @@ export default function ActivityDashboard() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="due-date"
+                                    className="text-sm font-medium text-gray-700"
+                                >
+                                    Due date
+                                </Label>
+                                <Input
+                                    id="due-date"
+                                    type="datetime-local"
+                                    value={selectedDueDate}
+                                    onChange={(event) =>
+                                        setSelectedDueDate(event.target.value)
+                                    }
+                                />
+                            </div>
                         </div>
 
                         <DialogFooter>
@@ -435,15 +503,17 @@ export default function ActivityDashboard() {
                                 onClick={() => {
                                     setSelectedActivity(null);
                                     setSelectedClassroom("");
+                                    setSelectedDueDate("");
                                 }}
                             >
                                 Cancel
                             </Button>
                             <Button
                                 onClick={handleAddToClassroom}
+                                disabled={assigning}
                                 className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
                             >
-                                Add to Classroom
+                                {assigning ? "Assigning..." : "Add to Classroom"}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

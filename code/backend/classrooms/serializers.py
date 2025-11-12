@@ -1,13 +1,16 @@
 from rest_framework import serializers
-from .models import Classroom
-from .models import Enrollment
+from django.contrib.auth import get_user_model
+
+from .models import Classroom, Enrollment, ClassroomActivityAssignment
 import random
 import string
+
+User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Classroom.created_by.field.related_model
+        model = User
         fields = ["id", "username", "first_name", "last_name", "email"]
         read_only_fields = ["id", "username", "first_name", "last_name", "email"]
 
@@ -97,7 +100,7 @@ class EnrollmentJoinSerializer(serializers.ModelSerializer):
         student = request.user
 
         # guard against dupes in DB
-        if Enrollment.objects.filter(classroom=classroom, student=student).exists:
+        if Enrollment.objects.filter(classroom=classroom, student=student).exists():
             raise serializers.ValidationError("User is already enrolled in classroom")
 
         enrollment = Enrollment.objects.create(
@@ -105,3 +108,101 @@ class EnrollmentJoinSerializer(serializers.ModelSerializer):
             student=student,
         )
         return enrollment
+
+
+class ClassroomActivityAssignSerializer(serializers.Serializer):
+    activity_id = serializers.CharField(max_length=50)
+    due_at = serializers.DateTimeField(required=False, allow_null=True)
+    student_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+    )
+
+    def validate_activity_id(self, value):
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Activity id cannot be empty.")
+        return cleaned
+
+    def validate(self, attrs):
+        classroom = self.context["classroom"]
+        student_ids = attrs.get("student_ids") or []
+
+        enrollment_qs = Enrollment.objects.filter(classroom=classroom)
+        if student_ids:
+            unique_ids = list(
+                dict.fromkeys(student_ids)
+            )  # preserve order, remove dupes
+            enrollments = list(
+                enrollment_qs.filter(student_id__in=unique_ids).select_related(
+                    "student"
+                )
+            )
+            found_ids = {en.student_id for en in enrollments}
+            missing = [sid for sid in unique_ids if sid not in found_ids]
+            if missing:
+                raise serializers.ValidationError(
+                    {"student_ids": f"Students not in classroom: {missing}"}
+                )
+        else:
+            enrollments = list(enrollment_qs.select_related("student"))
+
+        if not enrollments:
+            raise serializers.ValidationError(
+                {"student_ids": "No students are enrolled in this classroom."}
+            )
+
+        attrs["students"] = [en.student for en in enrollments]
+        return attrs
+
+
+class StudentAssignmentSerializer(serializers.ModelSerializer):
+    activity_id = serializers.CharField(
+        source="classroom_activity.activity_id", read_only=True
+    )
+    classroom = serializers.SerializerMethodField()
+    activity_title = serializers.SerializerMethodField()
+    pe = serializers.SerializerMethodField()
+    lp = serializers.SerializerMethodField()
+    lp_text = serializers.SerializerMethodField()
+    assigned_at = serializers.DateTimeField(
+        source="classroom_activity.assigned_at", read_only=True
+    )
+
+    class Meta:
+        model = ClassroomActivityAssignment
+        fields = [
+            "id",
+            "activity_id",
+            "activity_title",
+            "pe",
+            "lp",
+            "lp_text",
+            "due_at",
+            "status",
+            "assigned_at",
+            "classroom",
+        ]
+        read_only_fields = fields
+
+    def _get_activity_meta(self, obj):
+        activity_id = obj.classroom_activity.activity_id
+        activity_map = self.context.get("activity_map") or {}
+        return activity_map.get(activity_id) or {}
+
+    def get_classroom(self, obj):
+        classroom = obj.classroom_activity.classroom
+        return {"id": classroom.id, "name": classroom.name}
+
+    def get_activity_title(self, obj):
+        return self._get_activity_meta(obj).get("activity_title")
+
+    def get_pe(self, obj):
+        return self._get_activity_meta(obj).get("pe")
+
+    def get_lp(self, obj):
+        return self._get_activity_meta(obj).get("lp")
+
+    def get_lp_text(self, obj):
+        return self._get_activity_meta(obj).get("lp_text")
