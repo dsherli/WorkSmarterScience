@@ -1,4 +1,3 @@
-// src/auth/Protected.tsx
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
@@ -14,6 +13,9 @@ export default function Protected() {
         );
     }
 
-    if (user === null) return <Navigate to="/login" replace state={{ from: loc }} />;
+    if (!user && !loading) {
+        return <Navigate to="/login" replace state={{ from: loc }} />;
+    }
+
     return <Outlet />;
 }

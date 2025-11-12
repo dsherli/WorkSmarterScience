@@ -6,7 +6,7 @@ export default function AssessmentShell({ title, subtitle, children }: { title: 
                 <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
                     <div className="flex items-center gap-2">
                         <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600" />
-                        <span className="font-semibold tracking-tight">PersonalVTA</span>
+                        <span className="font-semibold tracking-tight">WorkSmartScience</span>
                     </div>
                     <nav className="hidden gap-6 text-sm text-slate-200/90 sm:flex">
                         <a className="hover:text-white" href="/">Home</a>

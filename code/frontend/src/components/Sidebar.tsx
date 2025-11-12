@@ -28,7 +28,7 @@ export default function Sidebar() {
                 >
                     <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600" />
                     {!collapsed && (
-                        <span className="font-semibold text-slate-800">PersonalVTA</span>
+                        <span className="font-semibold text-slate-800">WorkSmartScience</span>
                     )}
                 </div>
 

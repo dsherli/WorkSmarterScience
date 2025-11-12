@@ -1,12 +1,15 @@
 asgiref==3.10.0
+dj-database-url==3.0.1
 Django==5.2.7
-django-cors-headers==4.9.0
+django-cors-headers==4.3.1
 djangorestframework==3.16.1
 openai==1.54.3
 # httpx 0.28 removed the 'proxies' argument; openai 1.54.3 still passes it.
 # Pin httpx to <0.28 to avoid TypeError: Client.__init__() got an unexpected keyword argument 'proxies'
 httpx<0.28
-psycopg2-binary==2.9.11
-python-dotenv==1.0.1
+djangorestframework_simplejwt==5.5.1
+psycopg2-binary==2.9.9
+PyJWT==2.10.1
+python-dotenv==1.2.1
 sqlparse==0.5.3
 typing_extensions==4.15.0

@@ -22,7 +22,6 @@ export default function Assessment1() {
                 setLoading(false);
             })
             .catch((err) => {
-                console.error("Error fetching activity:", err);
                 setLoading(false);
             });
     }, [activity_id]);
@@ -96,38 +95,32 @@ export default function Assessment1() {
 
             <div className="mt-8 grid gap-6">
                 {/* Shared image */}
-                {activity.activity_image && (
-                    <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm">
-                        <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-emerald-500 to-emerald-600" />
-                        <h2 className="font-semibold text-slate-900">Reference Image</h2>
-
-                        <div className="mt-4 grid grid-cols-1 gap-4">
-                            <div>
-                                <figure className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                                    <img
-                                        className="block h-auto w-full object-contain"
-                                        src={activity.activity_image}
-                                        alt="Reference table"
-                                    />
-                                </figure>
-                                <div className="mt-2 text-right">
-                                    <a
-                                        href={activity.activity_image}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sm font-medium text-emerald-700 hover:text-emerald-800"
-                                    >
-                                        View full size ↗
-                                    </a>
-                                </div>
-                            </div>
+                {activity.media && activity.media.length > 0 && (
+                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <h2 className="font-semibold text-slate-900">Reference Media</h2>
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {activity.media.map((item: any, idx: number) => {
+                                const mediaUrl = item.url;
+                                return (
+                                    <figure key={idx} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        {item.media_type === "image" ? (
+                                            <img
+                                                src={mediaUrl}
+                                                alt={item.description || `reference ${idx + 1}`}
+                                                className="block w-full h-auto object-contain"
+                                            />
+                                        ) : (
+                                            <video controls className="block w-full rounded-lg">
+                                                <source src={mediaUrl} type="video/mp4" />
+                                            </video>
+                                        )}
+                                        {item.description && (
+                                            <figcaption className="p-2 text-sm text-slate-600">{item.description}</figcaption>
+                                        )}
+                                    </figure>
+                                );
+                            })}
                         </div>
-
-                        {activity.image_description && (
-                            <p className="mt-4 text-slate-700">
-                                {activity.image_description}
-                            </p>
-                        )}
                     </section>
                 )}
 
