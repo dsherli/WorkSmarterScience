@@ -17,6 +17,7 @@ from .serializers import (
     ClassroomSerializer,
     EnrollmentJoinSerializer,
     ClassroomActivityAssignSerializer,
+    ClassroomActivitySummarySerializer,
     StudentAssignmentSerializer,
 )
 
@@ -192,6 +193,32 @@ class ClassroomActivityAssignView(APIView):
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+class ClassroomActivityListView(generics.ListAPIView):
+    serializer_class = ClassroomActivitySummarySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        classroom_id = self.kwargs.get("classroom_id")
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=self.request.user
+        )
+        self.classroom = classroom
+        return (
+            ClassroomActivity.objects.filter(classroom=classroom)
+            .prefetch_related("student_assignments")
+            .order_by("-assigned_at")
+        )
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        activity_ids = [activity.activity_id for activity in queryset]
+        activity_map = _activity_metadata(activity_ids)
+        context = self.get_serializer_context()
+        context["activity_map"] = activity_map
+        serializer = self.get_serializer(queryset, many=True, context=context)
+        return Response(serializer.data)
 
 
 class StudentAssignmentListView(generics.ListAPIView):

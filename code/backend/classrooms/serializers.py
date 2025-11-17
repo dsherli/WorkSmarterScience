@@ -1,7 +1,12 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
-from .models import Classroom, Enrollment, ClassroomActivityAssignment
+from .models import (
+    Classroom,
+    Enrollment,
+    ClassroomActivity,
+    ClassroomActivityAssignment,
+)
 import random
 import string
 
@@ -155,6 +160,87 @@ class ClassroomActivityAssignSerializer(serializers.Serializer):
 
         attrs["students"] = [en.student for en in enrollments]
         return attrs
+
+
+class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
+    activity_title = serializers.SerializerMethodField()
+    pe = serializers.SerializerMethodField()
+    lp = serializers.SerializerMethodField()
+    lp_text = serializers.SerializerMethodField()
+    total_assignments = serializers.SerializerMethodField()
+    submitted_assignments = serializers.SerializerMethodField()
+    average_score = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClassroomActivity
+        fields = [
+            "id",
+            "activity_id",
+            "activity_title",
+            "pe",
+            "lp",
+            "lp_text",
+            "assigned_at",
+            "due_at",
+            "status",
+            "total_assignments",
+            "submitted_assignments",
+            "average_score",
+        ]
+        read_only_fields = fields
+
+    def _get_activity_meta(self, obj):
+        activity_map = self.context.get("activity_map") or {}
+        return activity_map.get(obj.activity_id) or {}
+
+    def _get_assignments(self, obj):
+        cached = getattr(obj, "_cached_assignments", None)
+        if cached is None:
+            cached = list(obj.student_assignments.all())
+            setattr(obj, "_cached_assignments", cached)
+        return cached
+
+    def get_activity_title(self, obj):
+        return self._get_activity_meta(obj).get("activity_title")
+
+    def get_pe(self, obj):
+        return self._get_activity_meta(obj).get("pe")
+
+    def get_lp(self, obj):
+        return self._get_activity_meta(obj).get("lp")
+
+    def get_lp_text(self, obj):
+        return self._get_activity_meta(obj).get("lp_text")
+
+    def get_total_assignments(self, obj):
+        return len(self._get_assignments(obj))
+
+    def get_submitted_assignments(self, obj):
+        assignments = self._get_assignments(obj)
+        return sum(
+            1
+            for assignment in assignments
+            if assignment.status in ("submitted", "completed")
+        )
+
+    def get_average_score(self, obj):
+        assignments = self._get_assignments(obj)
+        scores = [
+            assignment.score
+            for assignment in assignments
+            if assignment.score is not None
+        ]
+        if not scores:
+            return None
+        return sum(scores) / len(scores)
+
+    def get_status(self, obj):
+        total = self.get_total_assignments(obj)
+        submitted = self.get_submitted_assignments(obj)
+        if total > 0 and submitted >= total:
+            return "completed"
+        return "active"
 
 
 class StudentAssignmentSerializer(serializers.ModelSerializer):
