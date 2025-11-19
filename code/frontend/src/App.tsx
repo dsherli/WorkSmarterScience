@@ -9,6 +9,7 @@ import MyClassroomsPage from "./pages/MyClassroomsPage";
 import ActivityLibrary from "./pages/ActivityLibrary";
 import ClassroomPage from "./pages/ClassroomPage";
 import ActivityDetailPage from "./pages/ActivityDetailPage";
+import TeacherGroupPage from "./pages/TeacherGroupPage";
 import { Toaster } from "./components/ui/sonner";
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
                         <Route path="activity-library" element={<ActivityLibrary />} />
                         <Route path="classroom/:id" element={<ClassroomPage />} />
                         <Route path="activities" element={<ActivityDetailPage />} />
+                        <Route path="groups" element={<TeacherGroupPage />} />
                         {/* edit later
                             <Route path="activities/:id" element={<ActivityDetailPage />} />
                         */}

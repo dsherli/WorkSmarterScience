@@ -8,6 +8,7 @@ import {
     LayoutDashboard,
     BookOpen,
     Users,
+    UsersRound,
     MessageSquare,
     Settings,
     LogOut,
@@ -36,6 +37,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         { icon: BookOpen, label: "My Classrooms", page: "classrooms" },
         { icon: Activity, label: "Activity Library", page: "activity-library" },
         { icon: Users, label: "Students", page: "students" },
+        { icon: UsersRound, label: "Groups", page: "groups" },
         { icon: MessageSquare, label: "AI Insights", page: "ai-insights" }
     ];
 

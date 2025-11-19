@@ -48,14 +48,14 @@ class ClassroomSerializer(serializers.ModelSerializer):
             "updated_at",
             "enrollments",
         ]
-        read_only_fields = (
-            "id",
-            "code",
-            "created_by",
-            "created_at",
-            "updated_at",
-            "enrollments",
-        )
+    read_only_fields = (
+        "id",
+        "code",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "enrollments",
+    )
 
     def create(self, validated_data):
         user = self.context["request"].user
@@ -90,21 +90,17 @@ class EnrollmentJoinSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        # remove join code
         validated_data.pop("join_code", None)
 
-        # request
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:
             raise serializers.ValidationError(
                 "User must be authenticated to join a classroom"
             )
 
-        # set classroom and student = user
         classroom = self.context["classroom"]
         student = request.user
 
-        # guard against dupes in DB
         if Enrollment.objects.filter(classroom=classroom, student=student).exists():
             raise serializers.ValidationError("User is already enrolled in classroom")
 
@@ -135,14 +131,11 @@ class ClassroomActivityAssignSerializer(serializers.Serializer):
         student_ids = attrs.get("student_ids") or []
 
         enrollment_qs = Enrollment.objects.filter(classroom=classroom)
+
         if student_ids:
-            unique_ids = list(
-                dict.fromkeys(student_ids)
-            )  # preserve order, remove dupes
+            unique_ids = list(dict.fromkeys(student_ids))
             enrollments = list(
-                enrollment_qs.filter(student_id__in=unique_ids).select_related(
-                    "student"
-                )
+                enrollment_qs.filter(student_id__in=unique_ids).select_related("student")
             )
             found_ids = {en.student_id for en in enrollments}
             missing = [sid for sid in unique_ids if sid not in found_ids]
@@ -152,11 +145,6 @@ class ClassroomActivityAssignSerializer(serializers.Serializer):
                 )
         else:
             enrollments = list(enrollment_qs.select_related("student"))
-
-        if not enrollments:
-            raise serializers.ValidationError(
-                {"student_ids": "No students are enrolled in this classroom."}
-            )
 
         attrs["students"] = [en.student for en in enrollments]
         return attrs
@@ -226,11 +214,7 @@ class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
 
     def get_average_score(self, obj):
         assignments = self._get_assignments(obj)
-        scores = [
-            assignment.score
-            for assignment in assignments
-            if assignment.score is not None
-        ]
+        scores = [assignment.score for assignment in assignments if assignment.score is not None]
         if not scores:
             return None
         return sum(scores) / len(scores)

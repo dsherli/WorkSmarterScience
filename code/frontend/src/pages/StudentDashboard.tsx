@@ -521,22 +521,7 @@ export function StudentDashboard() {
                         </Card>
                     </div>
 
-                    {/* AI Assistant */}
-                    <Card className="p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white">
-                                <Bot className="w-8 h-8" />
-                            </div>
-                            <div className="flex-1">
-                                <h2 className="text-xl mb-1">Need Help?</h2>
-                                <p className="text-gray-600">Ask AI if you are stuck on topics or assignments</p>
-                            </div>
-                            <Button size="lg">
-                                <MessageSquare className="w-4 h-4 mr-2" />
-                                Ask AI
-                            </Button>
-                        </div>
-                    </Card>
+                    
                 </TabsContent>
 
                 {/* Classes */}
