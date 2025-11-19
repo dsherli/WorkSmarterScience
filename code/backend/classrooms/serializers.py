@@ -243,6 +243,39 @@ class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
         return "active"
 
 
+class ClassroomActivityAssignmentSubmissionSerializer(serializers.ModelSerializer):
+    student = UserSerializer(read_only=True)
+    submission = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClassroomActivityAssignment
+        fields = [
+            "id",
+            "student",
+            "status",
+            "due_at",
+            "submitted_at",
+            "score",
+            "submission",
+        ]
+        read_only_fields = fields
+
+    def get_submission(self, obj):
+        submission_map = self.context.get("submission_map") or {}
+        submission = submission_map.get(obj.student_id)
+        if not submission:
+            return None
+        return {
+            "id": submission.id,
+            "status": submission.status,
+            "submitted_at": submission.submitted_at,
+            "score": submission.score,
+            "feedback_overview": submission.feedback_overview,
+            "attempt_number": submission.attempt_number,
+            "activity_answers": submission.activity_answers,
+        }
+
+
 class StudentAssignmentSerializer(serializers.ModelSerializer):
     activity_id = serializers.CharField(
         source="classroom_activity.activity_id", read_only=True

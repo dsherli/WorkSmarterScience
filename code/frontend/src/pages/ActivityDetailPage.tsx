@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -9,100 +9,7 @@ import { Input } from '../components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
 import { Progress } from '../components/ui/progress';
 import { ArrowLeft, CheckCircle2, XCircle, Clock, Calendar, Users, MessageSquare, Send, Bot, User as UserIcon, Edit3 } from 'lucide-react';
-
-interface StudentSubmission {
-    id: string;
-    studentName: string;
-    email: string;
-    status: 'submitted' | 'pending' | 'graded';
-    submittedAt?: string;
-    answer: string;
-    aiScore: number;
-    aiFeedback: string;
-    teacherScore?: number;
-    teacherFeedback?: string;
-    similarGroup?: number;
-}
-
-const mockActivity = {
-    id: '1',
-    title: 'Photosynthesis Lab Report (This is Mock Page. I am working on it now.)',
-    description: 'Analyze the process of photosynthesis and explain how plants convert light energy into chemical energy.',
-    dueDate: '2025-11-10',
-    totalPoints: 100,
-    classroomName: 'Biology - Period 3',
-};
-
-const mockSubmissions: StudentSubmission[] = [
-    {
-        id: '1',
-        studentName: 'Emma Johnson',
-        email: 'emma.j@school.edu',
-        status: 'graded',
-        submittedAt: '2025-11-08 14:30',
-        answer: 'Photosynthesis is the process by which plants use sunlight, water, and carbon dioxide to produce oxygen and energy in the form of sugar. It occurs in the chloroplasts of plant cells, specifically in structures called thylakoids. The process has two main stages: light-dependent reactions and the Calvin cycle.',
-        aiScore: 92,
-        aiFeedback: 'Excellent explanation of photosynthesis! You correctly identified the key components and mentioned both stages. Consider adding more detail about what happens in each stage.',
-        teacherScore: 95,
-        teacherFeedback: 'Great work, Emma! Your explanation is clear and accurate. I added a few points for your excellent lab methodology.',
-        similarGroup: 1,
-    },
-    {
-        id: '2',
-        studentName: 'Liam Smith',
-        email: 'liam.s@school.edu',
-        status: 'graded',
-        submittedAt: '2025-11-08 16:45',
-        answer: 'Plants make food using sunlight through photosynthesis. The chlorophyll in leaves captures light energy and converts CO2 and H2O into glucose (C6H12O6) and releases oxygen. This happens in chloroplasts and involves light reactions and dark reactions (Calvin cycle).',
-        aiScore: 88,
-        aiFeedback: 'Good understanding of the basic concept. You mentioned the key molecules and products. Try to explain more about the mechanism of each stage.',
-        teacherScore: 88,
-        teacherFeedback: 'Well done! Your chemical equation is accurate.',
-        similarGroup: 1,
-    },
-    {
-        id: '3',
-        studentName: 'Olivia Brown',
-        email: 'olivia.b@school.edu',
-        status: 'submitted',
-        submittedAt: '2025-11-09 10:20',
-        answer: 'Photosynthesis converts light energy to chemical energy. Plants take in CO2 from air and water from soil. Chlorophyll absorbs sunlight in the leaves. The light energy splits water molecules releasing oxygen as waste product and creates ATP and NADPH which power the Calvin cycle to make glucose.',
-        aiScore: 85,
-        aiFeedback: 'Very good! You understand the energy conversion and the role of ATP and NADPH. Excellent mention of water splitting. Consider organizing your answer into the two main stages more clearly.',
-        similarGroup: 2,
-    },
-    {
-        id: '4',
-        studentName: 'Noah Davis',
-        email: 'noah.d@school.edu',
-        status: 'submitted',
-        submittedAt: '2025-11-09 09:15',
-        answer: 'In photosynthesis, light energy is captured by chlorophyll molecules in the thylakoid membranes. During light reactions, water is split producing oxygen, ATP, and NADPH. The Calvin cycle then uses ATP and NADPH to fix CO2 into organic molecules like glucose. This process is crucial for life on Earth as it produces oxygen and organic compounds.',
-        aiScore: 95,
-        aiFeedback: 'Excellent comprehensive answer! You clearly explained both stages and mentioned the importance to life on Earth. Outstanding work!',
-        similarGroup: 2,
-    },
-    {
-        id: '5',
-        studentName: 'Ava Wilson',
-        email: 'ava.w@school.edu',
-        status: 'pending',
-        answer: '',
-        aiScore: 0,
-        aiFeedback: '',
-    },
-    {
-        id: '6',
-        studentName: 'Ethan Martinez',
-        email: 'ethan.m@school.edu',
-        status: 'submitted',
-        submittedAt: '2025-11-09 13:00',
-        answer: 'Photosynthesis is how plants make energy from sunlight. It happens in leaves. Plants need sunlight, water, and CO2. They produce oxygen and glucose.',
-        aiScore: 65,
-        aiFeedback: 'You have the basic idea, but your answer needs more detail. Explain WHERE in the plant cell this occurs, and describe the TWO main stages of photosynthesis. What are the light-dependent and light-independent reactions?',
-        similarGroup: 3,
-    },
-];
+import type { ScienceActivitySubmission } from './types';
 
 const similarGroups = [
     {
@@ -131,26 +38,142 @@ const similarGroups = [
     },
 ];
 
+type StudentSubmission = {
+    id: number;
+    studentId: number;
+    studentName: string;
+    email: string;
+    status: string;
+    submittedAt: string | null;
+    aiScore: number;
+    teacherScore: number | null;
+    aiFeedback: string;
+    teacherFeedback: string | null;
+    answer: string;
+    submission: ScienceActivitySubmission | null;
+    similarGroup?: number | null;
+};
+
 export default function ActivityDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+    const classroomId = searchParams.get('classroom');
+    const activityCode = searchParams.get('activity') || id || '';
 
     const [selectedStudent, setSelectedStudent] = useState<StudentSubmission | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [teacherScore, setTeacherScore] = useState('');
     const [teacherFeedback, setTeacherFeedback] = useState('');
+    const [activityDetails, setActivityDetails] = useState({
+        classroomName: '',
+        title: '',
+        description: '',
+        dueDate: '',
+    });
+    const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
+    const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+    const [submissionsError, setSubmissionsError] = useState<string | null>(null);
 
-    const submittedCount = mockSubmissions.filter(s => s.status !== 'pending').length;
-    const gradedCount = mockSubmissions.filter(s => s.status === 'graded').length;
-    const avgAiScore = Math.round(
-        mockSubmissions.filter(s => s.status !== 'pending').reduce((acc, s) => acc + s.aiScore, 0) / submittedCount
-    );
+    useEffect(() => {
+        if (!classroomId || !activityCode) {
+            setSubmissions([]);
+            setSubmissionsError('Select an activity from a classroom to view submissions.');
+            return;
+        }
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            setSubmissionsError('Not authenticated');
+            return;
+        }
+
+        const fetchSubmissions = async () => {
+            setLoadingSubmissions(true);
+            setSubmissionsError(null);
+            try {
+                const response = await fetch(
+                    `/api/classrooms/${classroomId}/activities/${activityCode}/submissions/`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    },
+                );
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData?.detail || 'Failed to load submissions');
+                }
+                const data = await response.json();
+                const mapped: StudentSubmission[] = (data.submissions || []).map((item: any) => {
+                    const student = item.student || {};
+                    const submission: ScienceActivitySubmission | null = item.submission || null;
+                    const fullName = `${student.first_name || ''} ${student.last_name || ''}`.trim()
+                        || student.username
+                        || 'Student';
+                    const answers = submission?.activity_answers;
+                    let formattedAnswer = '';
+                    if (answers) {
+                        if (typeof answers === 'string') {
+                            formattedAnswer = answers;
+                        } else if (Array.isArray(answers)) {
+                            formattedAnswer = answers.join('\n\n');
+                        } else {
+                            formattedAnswer = JSON.stringify(answers, null, 2);
+                        }
+                    }
+                    return {
+                        id: item.id,
+                        studentId: student.id,
+                        studentName: fullName,
+                        email: student.email || '',
+                        status: submission?.status || item.status || 'pending',
+                        submittedAt: submission?.submitted_at || item.submitted_at || null,
+                        aiScore: submission?.score ?? 0,
+                        teacherScore: item.score ?? submission?.score ?? null,
+                        aiFeedback: submission?.feedback_overview || 'No AI feedback available yet.',
+                        teacherFeedback: submission?.feedback_overview || null,
+                        answer: formattedAnswer || 'No answer submitted yet.',
+                        submission,
+                        similarGroup: null,
+                    };
+                });
+
+                setSubmissions(mapped);
+                setActivityDetails({
+                    classroomName: data.classroom?.name || '',
+                    title: data.activity?.title || data.activity?.activity_id || `Activity ${activityCode}`,
+                    description: data.activity?.lp_text || '',
+                    dueDate: data.activity?.due_at || '',
+                });
+            } catch (error) {
+                setSubmissions([]);
+                setSubmissionsError(error instanceof Error ? error.message : 'Failed to load submissions');
+            } finally {
+                setLoadingSubmissions(false);
+            }
+        };
+
+        fetchSubmissions();
+    }, [activityCode, classroomId]);
+
+    const submissionList = submissions;
+    const submittedCount = submissionList.filter(s => s.status !== 'pending' && !!s.submittedAt).length;
+    const gradedCount = submissionList.filter(s => s.status === 'graded').length;
+    const avgAiScore = submittedCount > 0
+        ? Math.round(
+            submissionList
+                .filter(s => typeof s.aiScore === 'number')
+                .reduce((acc, s) => acc + (s.aiScore || 0), 0) / submittedCount
+        )
+        : 0;
 
     const handleStudentClick = (student: StudentSubmission) => {
         setSelectedStudent(student);
         setEditMode(false);
-        setTeacherScore(student.teacherScore?.toString() || student.aiScore.toString());
-        setTeacherFeedback(student.teacherFeedback || student.aiFeedback);
+        setTeacherScore(student.teacherScore?.toString() || student.aiScore.toString() || '0');
+        setTeacherFeedback(student.teacherFeedback || student.aiFeedback || '');
     };
 
     const handleSaveFeedback = () => {
@@ -172,6 +195,9 @@ export default function ActivityDetailPage() {
             return <Badge variant="secondary" className="bg-gray-200 text-gray-600">Pending</Badge>;
         }
     };
+
+    const totalAssignments = submissionList.length;
+    const pendingCount = Math.max(totalAssignments - submittedCount, 0);
 
     const startGroupDiscussion = (groupId: number) => {
         console.log('Starting discussion for group:', groupId);
@@ -195,24 +221,24 @@ export default function ActivityDetailPage() {
                     <Card className="p-6 bg-white/80 backdrop-blur-sm">
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex-1">
-                                <div className="text-sm text-gray-600 mb-1">{mockActivity.classroomName}</div>
-                                <h1 className="text-3xl mb-2">{mockActivity.title}</h1>
-                                <p className="text-gray-600 mb-4">{mockActivity.description}</p>
+                                <div className="text-sm text-gray-600 mb-1">{activityDetails.classroomName || 'Classroom'}</div>
+                                <h1 className="text-3xl mb-2">{activityDetails.title || 'Activity Details'}</h1>
+                                <p className="text-gray-600 mb-4">{activityDetails.description || 'Review the activity submissions from your students.'}</p>
                                 <div className="flex items-center gap-4 text-sm text-gray-600">
                                     <div className="flex items-center gap-2">
                                         <Calendar className="w-4 h-4" />
-                                        Due: {new Date(mockActivity.dueDate).toLocaleDateString()}
+                                        Due: {activityDetails.dueDate ? new Date(activityDetails.dueDate).toLocaleDateString() : 'No due date'}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Users className="w-4 h-4" />
-                                        {submittedCount}/{mockSubmissions.length} submitted
+                                        {submittedCount}/{totalAssignments} submitted
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div className="text-sm text-gray-500 mb-2">
-                            <span>Activity ID: {id}</span>
+                            <span>Activity ID: {activityCode || id || 'N/A'}</span>
                         </div>
 
                         {/* Quick Stats */}
@@ -222,7 +248,7 @@ export default function ActivityDetailPage() {
                                     <CheckCircle2 className="w-4 h-4" />
                                     <span className="text-sm">Submitted</span>
                                 </div>
-                                <p className="text-2xl">{submittedCount}/{mockSubmissions.length}</p>
+                                <p className="text-2xl">{submittedCount}/{totalAssignments}</p>
                             </div>
 
                             <div className="p-4 bg-gradient-to-br from-cyan-50 to-teal-50 rounded-lg">
@@ -246,7 +272,7 @@ export default function ActivityDetailPage() {
                                     <Clock className="w-4 h-4" />
                                     <span className="text-sm">Pending</span>
                                 </div>
-                                <p className="text-2xl">{mockSubmissions.length - submittedCount}</p>
+                                <p className="text-2xl">{pendingCount}</p>
                             </div>
                         </div>
                     </Card>
@@ -268,7 +294,28 @@ export default function ActivityDetailPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {mockSubmissions.map((submission) => (
+                                {loadingSubmissions && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-sm text-gray-500">
+                                            Loading submissions...
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                {!loadingSubmissions && submissionsError && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-sm text-red-600">
+                                            {submissionsError}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                {!loadingSubmissions && !submissionsError && submissionList.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-sm text-gray-500">
+                                            No submissions yet. Encourage students to submit their work.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                {!loadingSubmissions && !submissionsError && submissionList.map((submission) => (
                                     <TableRow
                                         key={submission.id}
                                         className="cursor-pointer hover:bg-gray-50"
@@ -343,7 +390,12 @@ export default function ActivityDetailPage() {
                                                 ))}
                                             </div>
                                             <div className="text-sm text-gray-600">
-                                                Students: {group.studentIds.map(id => mockSubmissions.find(s => s.id === id)?.studentName).join(', ')}
+                                                Students: {(() => {
+                                                    const names = group.studentIds
+                                                        .map(id => submissionList.find(s => String(s.studentId) === id || String(s.id) === id)?.studentName)
+                                                        .filter(Boolean);
+                                                    return names.length ? names.join(', ') : 'Awaiting submissions';
+                                                })()}
                                             </div>
                                         </div>
                                         <Button

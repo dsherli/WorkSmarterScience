@@ -1,12 +1,21 @@
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 export default function Assessment1() {
-    const { activity_id } = useParams();
+    const { classroom_id, activity_id } = useParams();
     const [activity, setActivity] = useState<any>(null);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(true);
+    const token = localStorage.getItem("access_token");
+    const body = {
+        classroom: classroom_id,
+        activity: activity_id,
+        answers: answers,
+    };
+
+    // POST will be sent when the user clicks Submit (see handleSubmit below).
 
     useEffect(() => {
         if (!activity_id) return;
@@ -37,9 +46,34 @@ export default function Assessment1() {
     const answered = Object.values(answers).filter((v) => v?.trim()).length;
     const progress = Math.round((answered / questions.length) * 100);
 
-    function handleSubmit() {
-        setSubmitted(true);
-        alert("Responses submitted! (Demo only)");
+    async function handleSubmit() {
+        if (!activity_id) return;
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+            alert("You must be logged in to submit answers.");
+            return;
+        }
+        try {
+            const response = await fetch(`/api/activities/${activity_id}/submit/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    classroom: classroom_id,
+                    answers,
+                }),
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ([]));
+                throw new Error(data.detail || "Failed to submit answers.");
+            }
+            toast.success("Answers submitted successfully!");
+            setSubmitted(true);
+        } catch (error: any) {
+            toast.error(error.message || "An error occurred while submitting answers.");
+        }
     }
 
     return (

@@ -491,7 +491,7 @@ export default function ClassroomPage() {
                                 return (
                                     <Card
                                         key={activity.id}
-                                        onClick={() => navigate(`/dashboard/activities`)}
+                                        onClick={() => navigate(`/dashboard/activities?classroom=${classroom.id}&activity=${activity.activity_id}`)}
                                         className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg transition-shadow cursor-pointer"
                                     >
                                         <div className="flex items-center justify-between">

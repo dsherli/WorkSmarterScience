@@ -5,7 +5,7 @@ from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from activities.models import ScienceActivity
+from activities.models import ScienceActivity, ScienceActivitySubmission
 
 from .models import (
     Classroom,
@@ -18,6 +18,7 @@ from .serializers import (
     EnrollmentJoinSerializer,
     ClassroomActivityAssignSerializer,
     ClassroomActivitySummarySerializer,
+    ClassroomActivityAssignmentSubmissionSerializer,
     StudentAssignmentSerializer,
 )
 
@@ -219,6 +220,62 @@ class ClassroomActivityListView(generics.ListAPIView):
         context["activity_map"] = activity_map
         serializer = self.get_serializer(queryset, many=True, context=context)
         return Response(serializer.data)
+
+
+class ClassroomActivitySubmissionListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, classroom_id, activity_id):
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=request.user
+        )
+        classroom_activity = get_object_or_404(
+            ClassroomActivity, classroom=classroom, activity_id=activity_id
+        )
+
+        assignments = (
+            ClassroomActivityAssignment.objects.filter(
+                classroom_activity=classroom_activity
+            )
+            .select_related("student")
+            .order_by("student__last_name", "student__first_name", "student__username")
+        )
+
+        student_ids = [assignment.student_id for assignment in assignments]
+        submission_map = {}
+        if student_ids:
+            submissions = (
+                ScienceActivitySubmission.objects.filter(
+                    activity__activity_id=activity_id, student_id__in=student_ids
+                )
+                .order_by("-submitted_at", "-id")
+                .select_related("activity")
+            )
+            for submission in submissions:
+                if submission.student_id not in submission_map:
+                    submission_map[submission.student_id] = submission
+
+        serializer = ClassroomActivityAssignmentSubmissionSerializer(
+            assignments, many=True, context={"submission_map": submission_map}
+        )
+
+        activity_meta = _activity_metadata([activity_id]).get(activity_id, {})
+
+        return Response(
+            {
+                "classroom": {"id": classroom.id, "name": classroom.name},
+                "activity": {
+                    "id": classroom_activity.id,
+                    "activity_id": classroom_activity.activity_id,
+                    "due_at": classroom_activity.due_at,
+                    "title": activity_meta.get("activity_title"),
+                    "pe": activity_meta.get("pe"),
+                    "lp": activity_meta.get("lp"),
+                    "lp_text": activity_meta.get("lp_text"),
+                },
+                "submissions": serializer.data,
+            }
+        )
 
 
 class StudentAssignmentListView(generics.ListAPIView):

@@ -6,6 +6,7 @@ from .views import (
     StudentJoinClassView,
     ClassroomActivityAssignView,
     ClassroomActivityListView,
+    ClassroomActivitySubmissionListView,
     StudentAssignmentListView,
 )
 
@@ -23,6 +24,11 @@ urlpatterns = [
         "<int:classroom_id>/activities/",
         ClassroomActivityListView.as_view(),
         name="classroom-activities",
+    ),
+    path(
+        "<int:classroom_id>/activities/<str:activity_id>/submissions/",
+        ClassroomActivitySubmissionListView.as_view(),
+        name="classroom-activity-submissions",
     ),
     path(
         "assignments/", StudentAssignmentListView.as_view(), name="student-assignments"
