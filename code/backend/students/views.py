@@ -6,6 +6,7 @@ from rest_framework import status
 from django.contrib.auth import authenticate, get_user_model
 from django.middleware.csrf import get_token
 from django.http import JsonResponse
+from .models import StudentProfile
 
 User = get_user_model()
 
@@ -86,11 +87,19 @@ def register_view(request):
             first_name=first_name,
             last_name=last_name,
         )
-        if role and _has_field(User, "role"):
-            create_kwargs["role"] = role
-
         user = User.objects.create_user(**create_kwargs)
-        resp_role = getattr(user, "role", role)
+
+        # Save role to StudentProfile (not on auth_user)
+        if role:
+            profile, _ = StudentProfile.objects.get_or_create(user=user)
+            profile.role = role
+            profile.save()
+        else:
+            # Ensure profile exists for consistency
+            StudentProfile.objects.get_or_create(user=user)
+
+        profile = getattr(user, "student_profile", None)
+        resp_role = getattr(profile, "role", "")
 
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
@@ -152,7 +161,7 @@ def login_view(request):
                 "email": user.email,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
-                "role": getattr(user, "role", ""),
+                "role": getattr(getattr(user, "student_profile", None), "role", ""),
             },
             "access": access,
             "refresh": str(refresh),
@@ -173,7 +182,7 @@ def current_user(request):
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
-            "role": getattr(user, "role", ""),
+            "role": getattr(getattr(user, "student_profile", None), "role", ""),
         },
         headers=NO_STORE,
     )

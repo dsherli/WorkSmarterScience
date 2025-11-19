@@ -6,8 +6,13 @@ Provides unified interface for both OpenAI and Azure OpenAI APIs
 import os
 import json
 from typing import Optional, Dict, Any, List
-from openai import OpenAI, AzureOpenAI
 from django.conf import settings
+
+try:
+    from openai import OpenAI, AzureOpenAI
+except ModuleNotFoundError:
+    OpenAI = None
+    AzureOpenAI = None
 
 
 class AIService:
@@ -23,12 +28,15 @@ class AIService:
     
     def _initialize_client(self):
         """Initialize OpenAI or Azure OpenAI client based on available credentials"""
+        if AzureOpenAI is None and OpenAI is None:
+            print("[AIService] WARNING: openai package not installed. AI features disabled.")
+            return
         
         # Try Azure OpenAI first (since you have it in .env.example)
         azure_endpoint = getattr(settings, "AZURE_OPENAI_ENDPOINT", None)
         azure_key = getattr(settings, "AZURE_OPENAI_API_KEY", None)
         
-        if azure_endpoint and azure_key:
+        if azure_endpoint and azure_key and AzureOpenAI:
             self.client = AzureOpenAI(
                 api_key=azure_key,
                 api_version=getattr(settings, "AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
@@ -40,7 +48,7 @@ class AIService:
         
         # Fall back to standard OpenAI
         openai_key = getattr(settings, "OPENAI_API_KEY", None)
-        if openai_key:
+        if openai_key and OpenAI:
             self.client = OpenAI(api_key=openai_key)
             self.model = getattr(settings, "OPENAI_MODEL", "gpt-4")
             print(f"[AIService] Using OpenAI with model: {self.model}")
