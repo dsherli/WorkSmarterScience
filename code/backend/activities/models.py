@@ -38,8 +38,8 @@ class ScienceActivity(models.Model):
     tags = models.JSONField(null=True, blank=True)
 
     class Meta:
-        db_table = '"public"."science_activity"'
-        managed = False
+        db_table = 'science_activity'
+        managed = True
 
     def __str__(self):
         return f"{self.activity_id} - {self.activity_title or 'Untitled'} (v{self.version:.1f})"
@@ -57,6 +57,10 @@ class ScienceActivityImages(models.Model):
     description = models.TextField(blank=True, null=True)
     media_type = models.CharField(max_length=20, default="image")
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'science_activity_images'
+        managed = True
 
 
 @receiver(pre_save, sender=ScienceActivity)

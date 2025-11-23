@@ -75,7 +75,7 @@ def get_science_activity(request, activity_id):
             cursor.execute(
                 """
                 SELECT file_path, description, media_type
-                FROM public.science_activity_images
+                FROM science_activity_images
                 WHERE activity_id = %s
                 ORDER BY id ASC;
             """,
