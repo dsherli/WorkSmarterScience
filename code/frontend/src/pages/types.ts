@@ -23,4 +23,17 @@ type Classroom = {
     enrollments: Enrollment[];
 };
 
-export type { Student, Enrollment, Classroom };
+type ScienceActivitySubmission = {
+    id: number;
+    activity_id: number;
+    student_id: number;
+    teacher_id: number;
+    submitted_at: string | null;
+    status: string;
+    score: number | null;
+    feedback_overview: string | null;
+    attempt_number: number;
+    activity_answers: Record<string, any> | null;
+}
+
+export type { Student, Enrollment, Classroom, ScienceActivitySubmission };

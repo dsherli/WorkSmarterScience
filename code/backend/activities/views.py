@@ -1,8 +1,11 @@
+from django.conf import settings
 from django.db import connection
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from .models import ScienceActivity
+from classrooms.models import ClassroomActivityAssignment
+from .models import ScienceActivity, ScienceActivitySubmission
 
 
 def _parse_bool(value: str | None) -> bool | None:
@@ -68,7 +71,11 @@ def get_science_activity(request, activity_id):
     """
     try:
         activity = ScienceActivity.objects.get(activity_id=activity_id)
-        base_url = request.build_absolute_uri("/").rstrip("/")
+        base_url = (
+            settings.PUBLIC_MEDIA_BASE_URL.rstrip("/")
+            if getattr(settings, "PUBLIC_MEDIA_BASE_URL", "")
+            else request.build_absolute_uri("/").rstrip("/")
+        )
 
         # Fetch related media
         with connection.cursor() as cursor:
@@ -90,10 +97,7 @@ def get_science_activity(request, activity_id):
             if path.startswith("http"):
                 file_url = path
             else:
-                if path.startswith("media/"):
-                    file_url = f"{base_url}/{path}"
-                else:
-                    file_url = f"{base_url}/media/{path}"
+                file_url = f"{base_url}/{path}"
 
             media.append(
                 {
@@ -193,3 +197,87 @@ def get_activity_counts(request):
         return Response(counts, status=200)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_activity_attempt(request, activity_id):
+    """
+    Endpoint for students to submit their answers for a science activity.
+    Expects JSON body with 'answers' field containing their responses.
+    """
+    user = request.user
+    classroom_id = request.data.get("classroom")
+    answers = request.data.get("answers", {})
+
+    try:
+        science_activity = ScienceActivity.objects.get(activity_id=activity_id)
+    except ScienceActivity.DoesNotExist:
+        return Response({"detail": "Science activity not found."}, status=404)
+
+    if not isinstance(answers, dict):
+        return Response(
+            {"detail": "Invalid answers format. Expected a dictionary."}, status=400
+        )
+
+    assignment_qs = ClassroomActivityAssignment.objects.filter(
+        student=user,
+        classroom_activity__activity_id=science_activity.activity_id,
+    )
+    if classroom_id:
+        assignment_qs = assignment_qs.filter(
+            classroom_activity__classroom_id=classroom_id
+        )
+
+    classroom_assignment = assignment_qs.select_related(
+        "classroom_activity", "classroom_activity__assigned_by"
+    ).first()
+
+    if not classroom_assignment:
+        return Response(
+            {
+                "detail": "No assignment found for this activity in the specified classroom."
+            },
+            status=403,
+        )
+
+    submission, created = ScienceActivitySubmission.objects.get_or_create(
+        activity=science_activity,
+        student=user,
+        defaults={
+            "teacher": classroom_assignment.classroom_activity.assigned_by,
+            "submitted_at": timezone.now(),
+            "status": "submitted",
+            "activity_answers": answers,
+            "attempt_number": 1,
+        },
+    )
+
+    if not created:
+        submission.attempt_number = (submission.attempt_number or 1) + 1
+        submission.activity_answers = answers
+        submission.status = "submitted"
+        submission.submitted_at = timezone.now()
+        submission.teacher = classroom_assignment.classroom_activity.assigned_by
+        submission.save(
+            update_fields=[
+                "attempt_number",
+                "activity_answers",
+                "status",
+                "submitted_at",
+                "teacher",
+            ]
+        )
+
+    classroom_assignment.status = "submitted"
+    classroom_assignment.submitted_at = timezone.now()
+    classroom_assignment.save(update_fields=["status", "submitted_at"])
+
+    return Response(
+        {
+            "detail": "Activity attempt submitted successfully.",
+            "submission_id": submission.id,
+            "attempt_number": submission.attempt_number,
+        },
+        status=201 if created else 200,
+    )

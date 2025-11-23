@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Classroom, Student, Enrollment } from './types';
 
@@ -48,6 +48,21 @@ function StudentRow({ student }: { student: Student }) {
     );
 }
 
+type ClassroomAssignedActivity = {
+    id: number;
+    activity_id: string;
+    activity_title: string | null;
+    pe: string | null;
+    lp: string | null;
+    lp_text: string | null;
+    assigned_at: string;
+    due_at: string | null;
+    status: string;
+    total_assignments: number;
+    submitted_assignments: number;
+    average_score: number | null;
+};
+
 export default function ClassroomPage() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -57,6 +72,9 @@ export default function ClassroomPage() {
     const [copiedCode, setCopiedCode] = useState(false);
 
     const [showAddModal, setShowAddModal] = useState(false);
+    const [classActivities, setClassActivities] = useState<ClassroomAssignedActivity[]>([]);
+    const [activitiesLoading, setActivitiesLoading] = useState(false);
+    const [activitiesError, setActivitiesError] = useState<string | null>(null);
     const [activities, setActivities] = useState<any[]>([]);
     const [selectedActivity, setSelectedActivity] = useState('');
     const [dueDate, setDueDate] = useState('');
@@ -65,28 +83,13 @@ export default function ClassroomPage() {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [dueTime, setDueTime] = useState({ hour: '11', minute: '59', period: 'PM' });
+    const [assigningActivity, setAssigningActivity] = useState(false);
     const [categoryCounts, setCategoryCounts] = useState<{ [key: string]: number }>({});
     const [dueDateParts, setDueDateParts] = useState({
         month: '',
         day: '',
         year: '',
     });
-
-    const mockClassroom = {
-        id: '1',
-        name: 'Biology - Period 3',
-        code: 'BIO-P3-2024',
-        studentCount: 28,
-        activeActivities: 5,
-        averageCompletion: 78,
-        averageScore: 85,
-    };
-
-    const mockActivities = [
-        { id: 'A1', title: 'Genetics Worksheet', status: 'active', dueDate: '2025-11-10', submitted: 3, total: 5, avgScore: 88 },
-        { id: 'A2', title: 'Microscope Lab', status: 'completed', dueDate: '2025-10-31', submitted: 5, total: 5, avgScore: 91 },
-        { id: 'A3', title: 'Ecology Poster Project', status: 'active', dueDate: '2025-11-20', submitted: 2, total: 5, avgScore: 79 },
-    ];
 
     useEffect(() => {
         if (!selectedCategory) return;
@@ -99,7 +102,68 @@ export default function ClassroomPage() {
             .catch((err) => console.error('Failed to fetch activities', err));
     }, [selectedCategory]);
 
-    const handleAddActivity = () => {
+    const fetchClassActivities = useCallback(async () => {
+        if (!id) return;
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            setActivitiesError('Not authenticated');
+            setClassActivities([]);
+            return;
+        }
+
+        setActivitiesLoading(true);
+        setActivitiesError(null);
+
+        try {
+            const response = await fetch(`/api/classrooms/${id}/activities/`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load assigned activities');
+            }
+
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                setClassActivities(data);
+            } else {
+                setClassActivities([]);
+            }
+        } catch (error) {
+            console.error('Failed to load assigned activities', error);
+            setClassActivities([]);
+            setActivitiesError(error instanceof Error ? error.message : 'Failed to load assigned activities');
+        } finally {
+            setActivitiesLoading(false);
+        }
+    }, [id]);
+
+    const buildDueDateIso = () => {
+        if (!dueDate) return null;
+        let hour = parseInt(dueTime.hour, 10);
+        if (Number.isNaN(hour)) {
+            hour = 0;
+        }
+        if (dueTime.period === 'PM' && hour < 12) {
+            hour += 12;
+        }
+        if (dueTime.period === 'AM' && hour === 12) {
+            hour = 0;
+        }
+        const minute = dueTime.minute || '00';
+        const formattedHour = String(hour).padStart(2, '0');
+        const formattedMinute = String(minute).padStart(2, '0');
+        const dateTimeString = `${dueDate}T${formattedHour}:${formattedMinute}:00`;
+        const dateObject = new Date(dateTimeString);
+        if (Number.isNaN(dateObject.getTime())) {
+            return null;
+        }
+        return dateObject.toISOString();
+    };
+
+    const handleAddActivity = async () => {
         if (!selectedActivity) {
             toast.error('Please select an activity first');
             return;
@@ -110,9 +174,61 @@ export default function ClassroomPage() {
             return;
         }
 
-        toast.success(`Added "${selectedActivity}" to this classroom`);
-        setSelectedActivity('');
-        setShowAddModal(false);
+        const activityId = selectedActivityData?.activity_id || selectedActivity;
+        const isoDueAt = buildDueDateIso();
+
+        if (!activityId) {
+            toast.error('Unable to determine the selected activity');
+            return;
+        }
+
+        if (!isoDueAt) {
+            toast.error('Please provide a valid due date and time');
+            return;
+        }
+
+        const token = localStorage.getItem('access_token');
+        if (!token || !classroom) {
+            toast.error('Not authenticated');
+            return;
+        }
+
+        setAssigningActivity(true);
+
+        try {
+            const response = await fetch(`/api/classrooms/${classroom.id}/activities/assign/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    activity_id: activityId,
+                    due_at: isoDueAt,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message =
+                    errorData?.detail ||
+                    errorData?.non_field_errors?.[0] ||
+                    'Failed to assign activity';
+                throw new Error(message);
+            }
+
+            toast.success('Activity assigned to classroom');
+            setSelectedActivity('');
+            setShowAddModal(false);
+            setDueDate('');
+            setDueDateParts({ month: '', day: '', year: '' });
+            await fetchClassActivities();
+        } catch (error) {
+            console.error(error);
+            toast.error(error instanceof Error ? error.message : 'Failed to assign activity');
+        } finally {
+            setAssigningActivity(false);
+        }
     };
 
     useEffect(() => {
@@ -144,6 +260,10 @@ export default function ClassroomPage() {
 
         fetchClassroom();
     }, [id]);
+
+    useEffect(() => {
+        fetchClassActivities();
+    }, [fetchClassActivities]);
 
     useEffect(() => {
         const { year, month, day } = dueDateParts;
@@ -230,6 +350,23 @@ export default function ClassroomPage() {
         fetchCategoryCounts();
     };
 
+    const activeActivityCount = classActivities.filter((activity) => activity.status !== 'completed').length;
+    const totalAssignments = classActivities.reduce((sum, activity) => sum + (activity.total_assignments ?? 0), 0);
+    const submittedAssignments = classActivities.reduce(
+        (sum, activity) => sum + (activity.submitted_assignments ?? 0),
+        0,
+    );
+    const averageCompletion =
+        totalAssignments > 0 ? Math.round((submittedAssignments / totalAssignments) * 100) : null;
+    const scoreValues = classActivities
+        .map((activity) => activity.average_score)
+        .filter((value): value is number => typeof value === 'number');
+    const averageScore =
+        scoreValues.length > 0 ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : null;
+    const completionProgressValue = averageCompletion ?? 0;
+    const scoreProgressValue = averageScore ?? 0;
+    const engagementPercent = classActivities.length > 0 ? completionProgressValue : 0;
+
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-cyan-50 via-teal-50 to-blue-50 py-8">
             <div className="max-w-[95%] mx-auto px-4">
@@ -276,7 +413,7 @@ export default function ClassroomPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600">Active Activities</p>
-                                    <p className="text-2xl">{mockClassroom.activeActivities}</p>
+                                    <p className="text-2xl">{activitiesLoading ? '...' : activeActivityCount}</p>
                                 </div>
                             </div>
 
@@ -286,7 +423,7 @@ export default function ClassroomPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600">Avg Completion</p>
-                                    <p className="text-2xl">{mockClassroom.averageCompletion}%</p>
+                                    <p className="text-2xl">{averageCompletion !== null ? `${averageCompletion}%` : 'N/A'}</p>
                                 </div>
                             </div>
 
@@ -296,7 +433,7 @@ export default function ClassroomPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600">Avg Score</p>
-                                    <p className="text-2xl">{mockClassroom.averageScore}%</p>
+                                    <p className="text-2xl">{averageScore !== null ? `${averageScore}%` : 'N/A'}</p>
                                 </div>
                             </div>
                         </div>
@@ -314,21 +451,54 @@ export default function ClassroomPage() {
                     {/* Activities */}
                     <TabsContent value="activities">
                         <div className="space-y-3">
-                            {mockActivities.map((activity) => {
+                            {activitiesLoading && (
+                                <Card className="p-5 bg-white/80 backdrop-blur-sm">
+                                    <p className="text-sm text-gray-600">Loading assigned activities...</p>
+                                </Card>
+                            )}
+
+                            {!activitiesLoading && activitiesError && (
+                                <Card className="p-5 bg-white/80 backdrop-blur-sm border-red-200">
+                                    <p className="text-sm text-red-600">{activitiesError}</p>
+                                </Card>
+                            )}
+
+                            {!activitiesLoading && !activitiesError && classActivities.length === 0 && (
+                                <Card className="p-5 bg-white/80 backdrop-blur-sm">
+                                    <div className="flex items-center gap-3 text-gray-600">
+                                        <Activity className="w-5 h-5" />
+                                        <div>
+                                            <p className="font-semibold">No activities assigned yet</p>
+                                            <p className="text-sm">Use the Add Activity button to assign one of the released activities to this classroom.</p>
+                                        </div>
+                                    </div>
+                                </Card>
+                            )}
+
+                            {!activitiesLoading && !activitiesError && classActivities.map((activity) => {
+                                const submitted = activity.submitted_assignments ?? 0;
+                                const total = activity.total_assignments ?? 0;
+                                const progress = total > 0 ? (submitted / total) * 100 : 0;
+                                const roundedProgress = Math.round(progress);
+                                const pending = Math.max(total - submitted, 0);
+                                const averageScore = activity.average_score != null
+                                    ? Math.round(activity.average_score)
+                                    : null;
+                                const dueDateLabel = activity.due_at
+                                    ? new Date(activity.due_at).toLocaleDateString()
+                                    : 'No due date';
+
                                 return (
                                     <Card
                                         key={activity.id}
-                                        // -------------------------------------------------------------------------------------
-                                        // will change later onClick={() => navigate(`/activities/${activity.id}`)}
-                                        // -------------------------------------------------------------------------------------
-                                        onClick={() => navigate(`/dashboard/activities`)}
+                                        onClick={() => navigate(`/dashboard/activities?classroom=${classroom.id}&activity=${activity.activity_id}`)}
                                         className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg transition-shadow cursor-pointer"
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3 mb-2">
                                                     <FileText className="w-5 h-5 text-teal-600" />
-                                                    <h3 className="text-lg">{activity.title}</h3>
+                                                    <h3 className="text-lg">{activity.activity_title || activity.activity_id}</h3>
                                                     <Badge
                                                         variant={activity.status === 'completed' ? 'secondary' : 'default'}
                                                         className={getStatusColor(activity.status)}
@@ -340,40 +510,37 @@ export default function ClassroomPage() {
                                                 <div className="flex items-center gap-6 text-sm text-gray-600 mb-3">
                                                     <div className="flex items-center gap-2">
                                                         <Calendar className="w-4 h-4" />
-                                                        Due: {new Date(activity.dueDate).toLocaleDateString()}
+                                                        Due: {dueDateLabel}
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <CheckCircle2 className="w-4 h-4" />
-                                                        Submitted: {activity.submitted}/{activity.total}
+                                                        Submitted: {submitted}/{total}
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <TrendingUp className="w-4 h-4" />
-                                                        Avg Score: {activity.avgScore}%
+                                                        Avg Score: {averageScore != null ? `${averageScore}%` : 'N/A'}
                                                     </div>
                                                 </div>
 
                                                 <div className="flex items-center gap-3">
-                                                    <Progress
-                                                        value={(activity.submitted / activity.total) * 100}
-                                                        className="flex-1 h-2"
-                                                    />
+                                                    <Progress value={roundedProgress} className="flex-1 h-2" />
                                                     <span className="text-sm text-gray-600 min-w-[60px]">
-                                                        {Math.round((activity.submitted / activity.total) * 100)}%
+                                                        {roundedProgress}%
                                                     </span>
                                                 </div>
                                             </div>
 
-                                            {activity.status === 'active' && activity.submitted < activity.total && (
+                                            {activity.status !== 'completed' && pending > 0 && (
                                                 <div className="ml-4 flex items-center gap-2 text-orange-600">
                                                     <Clock className="w-5 h-5" />
                                                     <span className="text-sm">
-                                                        {activity.total - activity.submitted} pending
+                                                        {pending} pending
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
                                     </Card>
-                                )
+                                );
                             })}
                         </div>
                     </TabsContent>
@@ -414,23 +581,23 @@ export default function ClassroomPage() {
                                     <div>
                                         <div className="flex justify-between text-sm mb-2">
                                             <span className="text-gray-600">Overall Completion Rate</span>
-                                            <span>{mockClassroom.averageCompletion}%</span>
+                                            <span>{averageCompletion !== null ? `${averageCompletion}%` : 'N/A'}</span>
                                         </div>
-                                        <Progress value={mockClassroom.averageCompletion} className="h-3" />
+                                        <Progress value={completionProgressValue} className="h-3" />
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-2">
                                             <span className="text-gray-600">Average Score</span>
-                                            <span>{mockClassroom.averageScore}%</span>
+                                            <span>{averageScore !== null ? `${averageScore}%` : 'N/A'}</span>
                                         </div>
-                                        <Progress value={mockClassroom.averageScore} className="h-3" />
+                                        <Progress value={scoreProgressValue} className="h-3" />
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-2">
                                             <span className="text-gray-600">Student Engagement</span>
-                                            <span>86%</span>
+                                            <span>{classActivities.length > 0 ? `${engagementPercent}%` : 'N/A'}</span>
                                         </div>
-                                        <Progress value={86} className="h-3" />
+                                        <Progress value={engagementPercent} className="h-3" />
                                     </div>
                                 </div>
                             </Card>
@@ -457,7 +624,7 @@ export default function ClassroomPage() {
                                             <AlertCircle className="w-5 h-5 text-orange-600" />
                                             <span>Pending Submissions</span>
                                         </div>
-                                        <span className="text-orange-600">12</span>
+                                        <span className="text-orange-600">{classActivities.length - submittedAssignments}</span>
                                     </div>
                                 </div>
                             </Card>
@@ -861,10 +1028,10 @@ export default function ClassroomPage() {
                             {step === 'date' && (
                                 <Button
                                     onClick={handleAddActivity}
-                                    disabled={!dueDate}
+                                    disabled={!dueDate || assigningActivity}
                                     className="bg-teal-600 hover:bg-teal-700 text-white"
                                 >
-                                    Add to Classroom
+                                    {assigningActivity ? 'Assigning...' : 'Add to Classroom'}
                                 </Button>
                             )}
                         </DialogFooter>

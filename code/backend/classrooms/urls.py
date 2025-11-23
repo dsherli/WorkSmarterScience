@@ -4,6 +4,10 @@ from .views import (
     ClassroomDetailView,
     ClassroomMembershipListView,
     StudentJoinClassView,
+    ClassroomActivityAssignView,
+    ClassroomActivityListView,
+    ClassroomActivitySubmissionListView,
+    StudentAssignmentListView,
 )
 
 urlpatterns = [
@@ -11,4 +15,22 @@ urlpatterns = [
     path("<int:pk>/", ClassroomDetailView.as_view(), name="classroom-detail"),
     path("join/", StudentJoinClassView.as_view(), name="classroom-join"),
     path("enrolled/", ClassroomMembershipListView.as_view()),
+    path(
+        "<int:classroom_id>/activities/assign/",
+        ClassroomActivityAssignView.as_view(),
+        name="classroom-activity-assign",
+    ),
+    path(
+        "<int:classroom_id>/activities/",
+        ClassroomActivityListView.as_view(),
+        name="classroom-activities",
+    ),
+    path(
+        "<int:classroom_id>/activities/<str:activity_id>/submissions/",
+        ClassroomActivitySubmissionListView.as_view(),
+        name="classroom-activity-submissions",
+    ),
+    path(
+        "assignments/", StudentAssignmentListView.as_view(), name="student-assignments"
+    ),
 ]

@@ -62,8 +62,47 @@ class ClassroomActivity(models.Model):
     )
     activity_id = models.CharField(max_length=50)
     assigned_at = models.DateTimeField(auto_now_add=True)
+    assigned_by = models.ForeignKey(
+        User,
+        related_name="classroom_activity_assignments_created",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+    )
     due_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         unique_together = ("classroom", "activity_id")
         db_table = "classroom_activity"
+
+    def __str__(self):
+        return f"{self.activity_id} -> {self.classroom.name}"
+
+
+class ClassroomActivityAssignment(models.Model):
+    STATUS_CHOICES = [
+        ("assigned", "Assigned"),
+        ("submitted", "Submitted"),
+        ("completed", "Completed"),
+        ("late", "Late"),
+    ]
+
+    classroom_activity = models.ForeignKey(
+        ClassroomActivity, related_name="student_assignments", on_delete=models.CASCADE
+    )
+    student = models.ForeignKey(
+        User, related_name="activity_assignments", on_delete=models.CASCADE
+    )
+    due_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="assigned")
+    submitted_at = models.DateTimeField(blank=True, null=True)
+    score = models.FloatField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("classroom_activity", "student")
+        db_table = "classroom_activity_assignment"
+
+    def __str__(self):
+        return f"{self.student.username} -> {self.classroom_activity.activity_id}"

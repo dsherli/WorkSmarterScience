@@ -9,6 +9,7 @@ import MyClassroomsPage from "./pages/MyClassroomsPage";
 import ActivityLibrary from "./pages/ActivityLibrary";
 import ClassroomPage from "./pages/ClassroomPage";
 import ActivityDetailPage from "./pages/ActivityDetailPage";
+import Assessment1 from "./pages/Assessment1";
 import { Toaster } from "./components/ui/sonner";
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/login" element={<Login />} />
 
-                {/* Protected Dashboard */}
+                {/* Protected pages */}
                 <Route element={<Protected />}>
                     <Route path="/dashboard" element={<Dashboard />}>
                         <Route index element={<TeacherDashboard />} />
@@ -35,6 +36,7 @@ export default function App() {
                         */}
 
                     </Route>
+                    <Route path="/assessment/:classroom_id/:activity_id" element={<Assessment1 />} />
                 </Route>
             </Routes>
 

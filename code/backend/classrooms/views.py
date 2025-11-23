@@ -1,9 +1,36 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+
 from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Classroom, Enrollment
-from .serializers import ClassroomSerializer, EnrollmentJoinSerializer
+from activities.models import ScienceActivity, ScienceActivitySubmission
+
+from .models import (
+    Classroom,
+    Enrollment,
+    ClassroomActivity,
+    ClassroomActivityAssignment,
+)
+from .serializers import (
+    ClassroomSerializer,
+    EnrollmentJoinSerializer,
+    ClassroomActivityAssignSerializer,
+    ClassroomActivitySummarySerializer,
+    ClassroomActivityAssignmentSubmissionSerializer,
+    StudentAssignmentSerializer,
+)
+
+
+def _activity_metadata(activity_ids):
+    if not activity_ids:
+        return {}
+
+    records = ScienceActivity.objects.filter(activity_id__in=activity_ids).values(
+        "activity_id", "activity_title", "pe", "lp", "lp_text"
+    )
+    return {record["activity_id"]: record for record in records}
 
 
 class ClassroomListCreateView(generics.ListCreateAPIView):
@@ -100,3 +127,175 @@ class StudentJoinClassView(APIView):
             classroom, context={"request": request}
         ).data
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class ClassroomActivityAssignView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, classroom_id):
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=request.user
+        )
+
+        serializer = ClassroomActivityAssignSerializer(
+            data=request.data, context={"classroom": classroom}
+        )
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        activity_id = validated["activity_id"]
+        due_at = validated.get("due_at")
+        students = validated["students"]
+
+        with transaction.atomic():
+            classroom_activity, created = ClassroomActivity.objects.get_or_create(
+                classroom=classroom,
+                activity_id=activity_id,
+                defaults={"assigned_by": request.user, "due_at": due_at},
+            )
+
+            if not created:
+                updates = []
+                if due_at is not None and classroom_activity.due_at != due_at:
+                    classroom_activity.due_at = due_at
+                    updates.append("due_at")
+                if classroom_activity.assigned_by_id != request.user.id:
+                    classroom_activity.assigned_by = request.user
+                    updates.append("assigned_by")
+                if updates:
+                    classroom_activity.save(update_fields=updates)
+
+            assignments = []
+            for student in students:
+                defaults = {"due_at": due_at or classroom_activity.due_at}
+                (
+                    assignment,
+                    assign_created,
+                ) = ClassroomActivityAssignment.objects.select_for_update().get_or_create(
+                    classroom_activity=classroom_activity,
+                    student=student,
+                    defaults=defaults,
+                )
+                if not assign_created and due_at is not None:
+                    assignment.due_at = due_at
+                    assignment.save(update_fields=["due_at"])
+                assignments.append(assignment)
+
+        activity_map = _activity_metadata([activity_id])
+        data = StudentAssignmentSerializer(
+            assignments, many=True, context={"activity_map": activity_map}
+        ).data
+
+        return Response(
+            {
+                "classroom_activity_id": classroom_activity.id,
+                "assignment_count": len(assignments),
+                "assignments": data,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class ClassroomActivityListView(generics.ListAPIView):
+    serializer_class = ClassroomActivitySummarySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        classroom_id = self.kwargs.get("classroom_id")
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=self.request.user
+        )
+        self.classroom = classroom
+        return (
+            ClassroomActivity.objects.filter(classroom=classroom)
+            .prefetch_related("student_assignments")
+            .order_by("-assigned_at")
+        )
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        activity_ids = [activity.activity_id for activity in queryset]
+        activity_map = _activity_metadata(activity_ids)
+        context = self.get_serializer_context()
+        context["activity_map"] = activity_map
+        serializer = self.get_serializer(queryset, many=True, context=context)
+        return Response(serializer.data)
+
+
+class ClassroomActivitySubmissionListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, classroom_id, activity_id):
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=request.user
+        )
+        classroom_activity = get_object_or_404(
+            ClassroomActivity, classroom=classroom, activity_id=activity_id
+        )
+
+        assignments = (
+            ClassroomActivityAssignment.objects.filter(
+                classroom_activity=classroom_activity
+            )
+            .select_related("student")
+            .order_by("student__last_name", "student__first_name", "student__username")
+        )
+
+        student_ids = [assignment.student_id for assignment in assignments]
+        submission_map = {}
+        if student_ids:
+            submissions = (
+                ScienceActivitySubmission.objects.filter(
+                    activity__activity_id=activity_id, student_id__in=student_ids
+                )
+                .order_by("-submitted_at", "-id")
+                .select_related("activity")
+            )
+            for submission in submissions:
+                if submission.student_id not in submission_map:
+                    submission_map[submission.student_id] = submission
+
+        serializer = ClassroomActivityAssignmentSubmissionSerializer(
+            assignments, many=True, context={"submission_map": submission_map}
+        )
+
+        activity_meta = _activity_metadata([activity_id]).get(activity_id, {})
+
+        return Response(
+            {
+                "classroom": {"id": classroom.id, "name": classroom.name},
+                "activity": {
+                    "id": classroom_activity.id,
+                    "activity_id": classroom_activity.activity_id,
+                    "due_at": classroom_activity.due_at,
+                    "title": activity_meta.get("activity_title"),
+                    "pe": activity_meta.get("pe"),
+                    "lp": activity_meta.get("lp"),
+                    "lp_text": activity_meta.get("lp_text"),
+                },
+                "submissions": serializer.data,
+            }
+        )
+
+
+class StudentAssignmentListView(generics.ListAPIView):
+    serializer_class = StudentAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            ClassroomActivityAssignment.objects.filter(student=self.request.user)
+            .select_related("classroom_activity__classroom")
+            .order_by("due_at", "classroom_activity__assigned_at")
+        )
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        activity_ids = [
+            assignment.classroom_activity.activity_id for assignment in queryset
+        ]
+        activity_map = _activity_metadata(activity_ids)
+        serializer = self.get_serializer(
+            queryset, many=True, context={"activity_map": activity_map}
+        )
+        return Response(serializer.data)

@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useSubmissionActions } from "../hooks/useRubric";
 import type { AssessmentSubmission } from "../services/rubricService";
+import { toast } from "sonner";
 
 export default function Assessment1() {
-    const { activity_id } = useParams();
+    const { classroom_id, activity_id } = useParams();
     const [activity, setActivity] = useState<any>(null);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [submitted, setSubmitted] = useState(false);
@@ -12,6 +13,14 @@ export default function Assessment1() {
     const [grading, setGrading] = useState(false);
     const [gradingResult, setGradingResult] = useState<AssessmentSubmission | null>(null);
     const { create: createSubmission, grade: gradeSubmission } = useSubmissionActions();
+    const token = localStorage.getItem("access_token");
+    const body = {
+        classroom: classroom_id,
+        activity: activity_id,
+        answers: answers,
+    };
+
+    // POST will be sent when the user clicks Submit (see handleSubmit below).
 
     useEffect(() => {
         if (!activity_id) return;
@@ -44,39 +53,31 @@ export default function Assessment1() {
 
     async function handleSubmit() {
         if (!activity_id) return;
-        
-        setSubmitted(true);
-        setGrading(true);
-        setGradingResult(null);
-
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+            alert("You must be logged in to submit answers.");
+            return;
+        }
         try {
-            // Combine all answers into one text
-            const combinedAnswers = questions
-                .map((q: string, i: number) => {
-                    const answer = answers[i]?.trim();
-                    return answer ? `Question ${i + 1}: ${q}\n\nAnswer: ${answer}` : '';
-                })
-                .filter(Boolean)
-                .join('\n\n---\n\n');
-
-            // Create submission without forcing a rubric; backend will auto-map via ActivityRubricMap
-            const submission = await createSubmission({
-                activity_id: parseInt(activity_id),
-                question_text: activity.activity_task || questions.join(' '),
-                answer_text: combinedAnswers,
-                status: 'submitted' as const,
+            const response = await fetch(`/api/activities/${activity_id}/submit/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    classroom: classroom_id,
+                    answers,
+                }),
             });
-
-            // Automatically grade with AI
-            if (submission.id) {
-                const gradedSubmission = await gradeSubmission(submission.id);
-                setGradingResult(gradedSubmission);
+            if (!response.ok) {
+                const data = await response.json().catch(() => ([]));
+                throw new Error(data.detail || "Failed to submit answers.");
             }
-        } catch (error) {
-            console.error('Error submitting/grading:', error);
-            alert('Error submitting assignment. Please try again.');
-        } finally {
-            setGrading(false);
+            toast.success("Answers submitted successfully!");
+            setSubmitted(true);
+        } catch (error: any) {
+            toast.error(error.message || "An error occurred while submitting answers.");
         }
     }
 
