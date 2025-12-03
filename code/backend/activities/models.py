@@ -104,7 +104,6 @@ class ScienceActivitySubmission(models.Model):
     score = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=2)
     feedback_overview = models.TextField(null=True, blank=True)
     attempt_number = models.IntegerField(default=1)
-    activity_answers = models.JSONField(null=True, blank=True)
 
     class Meta:
         db_table = '"public"."activity_submissions"'
