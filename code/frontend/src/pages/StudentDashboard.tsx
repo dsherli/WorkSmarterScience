@@ -487,7 +487,7 @@ export function StudentDashboard() {
                                             )}
                                             <div className="mt-3">
                                                 <Button size="sm" className="w-full" asChild>
-                                                    <Link to={`/assessment/${assignment.activity_id}`}>
+                                                    <Link to={`/assessment/${assignment.classroom?.id}/${assignment.activity_id}`}>
                                                         Open Activity
                                                     </Link>
                                                 </Button>
@@ -661,7 +661,7 @@ export function StudentDashboard() {
                                         )}
                                         <div className="flex justify-end mt-auto">
                                             <Button size="sm" asChild>
-                                                <Link to={`/assessment/${assignment.activity_id}`}>
+                                                <Link to={`/assessment/${assignment.classroom?.id}/${assignment.activity_id}`}>
                                                     Start Activity
                                                 </Link>
                                             </Button>

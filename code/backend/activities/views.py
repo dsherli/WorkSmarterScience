@@ -1,8 +1,11 @@
+from django.conf import settings
 from django.db import connection
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from .models import ScienceActivity
+from classrooms.models import ClassroomActivityAssignment
+from .models import ScienceActivity, ScienceActivitySubmission
 
 
 def _parse_bool(value: str | None) -> bool | None:
@@ -68,14 +71,18 @@ def get_science_activity(request, activity_id):
     """
     try:
         activity = ScienceActivity.objects.get(activity_id=activity_id)
-        base_url = request.build_absolute_uri("/").rstrip("/")
+        base_url = (
+            settings.PUBLIC_MEDIA_BASE_URL.rstrip("/")
+            if getattr(settings, "PUBLIC_MEDIA_BASE_URL", "")
+            else request.build_absolute_uri("/").rstrip("/")
+        )
 
         # Fetch related media
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT file_path, description, media_type
-                FROM public.science_activity_images
+                FROM science_activity_images
                 WHERE activity_id = %s
                 ORDER BY id ASC;
             """,
@@ -90,10 +97,7 @@ def get_science_activity(request, activity_id):
             if path.startswith("http"):
                 file_url = path
             else:
-                if path.startswith("media/"):
-                    file_url = f"{base_url}/{path}"
-                else:
-                    file_url = f"{base_url}/media/{path}"
+                file_url = f"{base_url}/{path}"
 
             media.append(
                 {
@@ -193,3 +197,177 @@ def get_activity_counts(request):
         return Response(counts, status=200)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_activity_attempt(request, activity_id):
+    """
+    Endpoint for students to submit their answers for a science activity.
+    Expects JSON body with 'answers' field containing their responses.
+    """
+    user = request.user
+    classroom_id = request.data.get("classroom")
+    answers = request.data.get("answers", {})
+
+    try:
+        science_activity = ScienceActivity.objects.get(activity_id=activity_id)
+    except ScienceActivity.DoesNotExist:
+        return Response({"detail": "Science activity not found."}, status=404)
+
+    if not isinstance(answers, dict):
+        return Response(
+            {"detail": "Invalid answers format. Expected a dictionary."}, status=400
+        )
+
+    assignment_qs = ClassroomActivityAssignment.objects.filter(
+        student=user,
+        classroom_activity__activity_id=science_activity.activity_id,
+    )
+    if classroom_id:
+        assignment_qs = assignment_qs.filter(
+            classroom_activity__classroom_id=classroom_id
+        )
+
+    classroom_assignment = assignment_qs.select_related(
+        "classroom_activity", "classroom_activity__assigned_by"
+    ).first()
+
+    if not classroom_assignment:
+        return Response(
+            {
+                "detail": "No assignment found for this activity in the specified classroom."
+            },
+            status=403,
+        )
+
+    submission, created = ScienceActivitySubmission.objects.get_or_create(
+        activity=science_activity,
+        student=user,
+        defaults={
+            "teacher": classroom_assignment.classroom_activity.assigned_by,
+            "submitted_at": timezone.now(),
+            "status": "submitted",
+            "attempt_number": 1,
+        },
+    )
+
+    if not created:
+        submission.attempt_number = (submission.attempt_number or 1) + 1
+        submission.status = "submitted"
+        submission.submitted_at = timezone.now()
+        submission.teacher = classroom_assignment.classroom_activity.assigned_by
+        submission.save(
+            update_fields=[
+                "attempt_number",
+                "status",
+                "submitted_at",
+                "teacher",
+            ]
+        )
+
+    classroom_assignment.status = "submitted"
+    classroom_assignment.submitted_at = timezone.now()
+    classroom_assignment.save(update_fields=["status", "submitted_at"])
+    # Auto-create an AssessmentSubmission and trigger AI grading
+    try:
+        from grading.models import AssessmentSubmission, ActivityRubricMap, Rubric
+        from grading.ai_service import get_ai_service
+
+        # Build question_text and answer_text strings from activity and answers
+        questions = [
+            q for q in [
+                science_activity.question_1,
+                science_activity.question_2,
+                science_activity.question_3,
+                science_activity.question_4,
+                science_activity.question_5,
+            ] if q and str(q).strip()
+        ]
+        question_text = "\n\n".join([
+            f"Question {i+1}: {q}" for i, q in enumerate(questions)
+        ])
+
+        # answers stored in JSON; normalize into string blocks
+        answer_blocks = []
+        if isinstance(answers, dict):
+            for i, q in enumerate(questions):
+                key_candidates = [
+                    f"q{i+1}", f"question_{i+1}", f"answer_{i+1}", f"Question {i+1}", str(i+1)
+                ]
+                ans = None
+                for k in key_candidates:
+                    if k in answers and answers[k]:
+                        ans = answers[k]
+                        break
+                if ans is None:
+                    # fallback by matching first answer-like value
+                    ans = answers.get(f"answer{i+1}") or ""
+                answer_blocks.append(f"Question {i+1}: {q}\nAnswer: {ans}")
+        else:
+            # if answers is already a string
+            answer_blocks.append(str(answers))
+        answer_text = "\n\n---\n\n".join(answer_blocks)
+
+        # Find rubric mapping for this activity code
+        rubric = None
+        try:
+            mapping = ActivityRubricMap.objects.select_related("rubric").filter(activity_code=science_activity.activity_id).first()
+            rubric = mapping.rubric if mapping else None
+        except Exception:
+            rubric = None
+
+        assess_submission = AssessmentSubmission.objects.create(
+            student=user,
+            activity_id=science_activity.id,
+            question_text=question_text,
+            answer_text=answer_text,
+            rubric=rubric,
+            status="submitted",
+        )
+
+        # Trigger AI grading (levels by question for now)
+        ai = get_ai_service()
+        if ai.is_configured():
+            # Build rubric summary context if available
+            context_lines = []
+            if rubric:
+                context_lines.append(f"Rubric: {rubric.title}")
+                if rubric.description:
+                    context_lines.append(rubric.description)
+                context_lines.append("Criteria:")
+                for c in rubric.criteria.all():
+                    context_lines.append(f"- {c.name}: {c.description}")
+            context = "\n".join(context_lines) if context_lines else ""
+
+            result = ai.grade_levels_by_question(
+                question_text=assess_submission.question_text,
+                answer_text=assess_submission.answer_text,
+                context=context,
+            )
+
+            assess_submission.feedback = result.get("overall_feedback", "")
+            assess_submission.status = "graded"
+            assess_submission.graded_at = timezone.now()
+            assess_submission.graded_by_ai = True
+            assess_submission.ai_model_used = result.get("model_used", "")
+            assess_submission.tokens_used = result.get("tokens_used")
+            assess_submission.save()
+
+            # Reflect graded status back to the activity submission
+            submission.status = "graded"
+            submission.feedback_overview = assess_submission.feedback
+            submission.score = None
+            submission.save(update_fields=["status", "feedback_overview", "score"])
+    except Exception as e:
+        # Non-fatal: return success for submission even if grading fails
+        pass
+
+    return Response(
+        {
+            "detail": "Activity attempt submitted successfully.",
+            "submission_id": submission.id,
+            "attempt_number": submission.attempt_number,
+        },
+        status=201 if created else 200,
+    )

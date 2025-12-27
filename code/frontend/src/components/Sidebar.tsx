@@ -1,6 +1,6 @@
 ﻿import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { X } from "lucide-react";
 
 export default function Sidebar() {
     const { pathname } = useLocation();
@@ -78,6 +78,16 @@ export default function Sidebar() {
                 <Link to="/settings" className={linkClass("/settings")}>
                     <span className="text-lg">⚙️</span>
                     {!collapsed && "Settings"}
+                </Link>
+
+                <hr
+                    className={`my-2 border-slate-200 transition-all ${collapsed ? "w-8 mx-auto" : "w-full"
+                        }`}
+                />
+
+                <Link to="/rubrics/manage" className={linkClass("/rubrics/manage")}>
+                    <span className="text-lg">🧩</span>
+                    {!collapsed && "Rubric Manager"}
                 </Link>
             </nav>
         </aside>
