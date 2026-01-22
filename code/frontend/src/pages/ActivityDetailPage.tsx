@@ -112,17 +112,17 @@ export default function ActivityDetailPage() {
                     const fullName = `${student.first_name || ''} ${student.last_name || ''}`.trim()
                         || student.username
                         || 'Student';
-                    const answers = submission?.activity_answers;
+                    
+                    // Format answers from the normalized answers array
+                    const answers = submission?.answers || [];
                     let formattedAnswer = '';
-                    if (answers) {
-                        if (typeof answers === 'string') {
-                            formattedAnswer = answers;
-                        } else if (Array.isArray(answers)) {
-                            formattedAnswer = answers.join('\n\n');
-                        } else {
-                            formattedAnswer = JSON.stringify(answers, null, 2);
-                        }
+                    if (answers.length > 0) {
+                        formattedAnswer = answers
+                            .sort((a: any, b: any) => a.question_number - b.question_number)
+                            .map((ans: any) => `Q${ans.question_number}: ${ans.student_answer || '(no answer)'}`)
+                            .join('\n\n');
                     }
+                    
                     return {
                         id: item.id,
                         studentId: student.id,

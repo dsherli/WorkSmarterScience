@@ -33,7 +33,20 @@ type ScienceActivitySubmission = {
     score: number | null;
     feedback_overview: string | null;
     attempt_number: number;
-    activity_answers: Record<string, any> | null;
+    // Answers are now in a separate normalized table
+    answers?: ActivityAnswer[];
 }
 
-export type { Student, Enrollment, Classroom, ScienceActivitySubmission };
+type ActivityAnswer = {
+    id: number;
+    submission_id: number;
+    question_number: number;
+    question_text: string;
+    student_answer: string | null;
+    ai_feedback: string | null;
+    teacher_feedback: string | null;
+    score: number | null;
+    updated_at: string;
+}
+
+export type { Student, Enrollment, Classroom, ScienceActivitySubmission, ActivityAnswer };

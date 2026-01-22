@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from classrooms.models import ClassroomActivityAssignment
-from .models import ScienceActivity, ScienceActivitySubmission
+from .models import ScienceActivity, ScienceActivitySubmission, ActivityAnswer
 
 
 def _parse_bool(value: str | None) -> bool | None:
@@ -241,6 +241,7 @@ def submit_activity_attempt(request, activity_id):
             status=403,
         )
 
+    # Get or create the submission record (without activity_answers)
     submission, created = ScienceActivitySubmission.objects.get_or_create(
         activity=science_activity,
         student=user,
@@ -248,25 +249,50 @@ def submit_activity_attempt(request, activity_id):
             "teacher": classroom_assignment.classroom_activity.assigned_by,
             "submitted_at": timezone.now(),
             "status": "submitted",
-            "activity_answers": answers,
             "attempt_number": 1,
         },
     )
 
     if not created:
         submission.attempt_number = (submission.attempt_number or 1) + 1
-        submission.activity_answers = answers
         submission.status = "submitted"
         submission.submitted_at = timezone.now()
         submission.teacher = classroom_assignment.classroom_activity.assigned_by
         submission.save(
             update_fields=[
                 "attempt_number",
-                "activity_answers",
                 "status",
                 "submitted_at",
                 "teacher",
             ]
+        )
+
+    # Get question texts from the activity
+    questions = [
+        q.strip()
+        for q in [
+            science_activity.question_1,
+            science_activity.question_2,
+            science_activity.question_3,
+            science_activity.question_4,
+            science_activity.question_5,
+        ]
+        if q and q.strip()
+    ]
+
+    # Upsert each answer into the normalized activity_answers table
+    for idx_str, answer_text in answers.items():
+        idx = int(idx_str)
+        question_num = idx + 1  # Convert 0-based index to 1-based question number
+        question_text = questions[idx] if idx < len(questions) else f"Question {question_num}"
+
+        ActivityAnswer.objects.update_or_create(
+            submission=submission,
+            question_number=question_num,
+            defaults={
+                "question_text": question_text,
+                "student_answer": answer_text or "",
+            },
         )
 
     classroom_assignment.status = "submitted"

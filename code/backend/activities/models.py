@@ -104,7 +104,7 @@ class ScienceActivitySubmission(models.Model):
     score = models.DecimalField(null=True, blank=True, max_digits=5, decimal_places=2)
     feedback_overview = models.TextField(null=True, blank=True)
     attempt_number = models.IntegerField(default=1)
-    activity_answers = models.JSONField(null=True, blank=True)
+    # Note: answers are stored in the normalized ActivityAnswer table, not here
 
     class Meta:
         db_table = '"public"."activity_submissions"'
@@ -112,6 +112,52 @@ class ScienceActivitySubmission(models.Model):
 
     def __str__(self):
         return f"Submission #{self.id} - activity {self.activity_id} - student {self.student_id}"
+
+    @property
+    def questions(self):
+        """Helper to get activity questions as a list."""
+        if not self.activity:
+            return []
+        return [
+            q.strip()
+            for q in [
+                self.activity.question_1,
+                self.activity.question_2,
+                self.activity.question_3,
+                self.activity.question_4,
+                self.activity.question_5,
+            ]
+            if q and q.strip()
+        ]
+
+
+class ActivityAnswer(models.Model):
+    """
+    Normalized table for storing individual question answers.
+    Maps to public.activity_answers table.
+    """
+    id = models.BigAutoField(primary_key=True)
+    submission = models.ForeignKey(
+        ScienceActivitySubmission,
+        on_delete=models.CASCADE,
+        db_column="submission_id",
+        related_name="answers",
+    )
+    question_number = models.SmallIntegerField()
+    question_text = models.TextField()
+    student_answer = models.TextField(blank=True, null=True)
+    ai_feedback = models.TextField(blank=True, null=True)
+    teacher_feedback = models.TextField(blank=True, null=True)
+    score = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = '"public"."activity_answers"'
+        managed = False
+        unique_together = ["submission", "question_number"]
+
+    def __str__(self):
+        return f"Answer #{self.id} - Q{self.question_number} for submission {self.submission_id}"
 
 
 @receiver(pre_save, sender=ScienceActivity)
