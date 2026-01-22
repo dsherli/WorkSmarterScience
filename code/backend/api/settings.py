@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "activities",
     "rest_framework_simplejwt",
     "classrooms",
+    "grading",
 ]
 
 # Middleware

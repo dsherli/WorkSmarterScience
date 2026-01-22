@@ -35,6 +35,8 @@ urlpatterns = [
     path("api/activities/", include("activities.urls")),
     # Classroom
     path("api/classrooms/", include("classrooms.urls")),
+    # AI Grading
+    path("api/grading/", include("grading.urls")),
     # JWT authentication endpoints
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
