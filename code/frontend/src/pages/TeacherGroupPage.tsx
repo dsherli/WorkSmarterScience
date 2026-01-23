@@ -1,4 +1,17 @@
-﻿import { useState, useRef, useEffect } from "react";
+﻿import React, { useState, useRef, useEffect } from "react";
+import { groupsApi } from "../api/groups";
+
+// fetchWithAuth helper for fetching classrooms
+const fetchWithAuth = async (url: string) => {
+    const token = localStorage.getItem("access_token");
+    const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+    };
+    const res = await fetch(`/api${url}`, { headers });
+    if (!res.ok) throw new Error(res.statusText);
+    return res.json();
+};
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -18,22 +31,15 @@ import {
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "../components/ui/dialog";
 import {
     Send,
-    Settings,
-    UserPlus,
     Grid3x3,
     Maximize2,
     ZoomIn,
     ZoomOut,
     Minimize2,
     Users,
-    ChevronDown,
-    ChevronUp,
-    ChevronLeft,
-    ChevronRight,
 } from "lucide-react";
 
 interface Student {
@@ -62,21 +68,9 @@ interface Message {
     timestamp: Date;
 }
 
-const studentAvatars = [
-    { char: "👨‍🎓", color: "from-blue-500 to-blue-600" },
-    { char: "👩‍🎓", color: "from-pink-500 to-pink-600" },
-    { char: "🧑‍🎓", color: "from-purple-500 to-purple-600" },
-    { char: "👦", color: "from-green-500 to-green-600" },
-    { char: "👧", color: "from-yellow-500 to-yellow-600" },
-    { char: "🧒", color: "from-orange-500 to-orange-600" },
-    { char: "👨‍💻", color: "from-cyan-500 to-cyan-600" },
-    { char: "👩‍💻", color: "from-rose-500 to-rose-600" },
-    { char: "🧑‍💻", color: "from-indigo-500 to-indigo-600" },
-    { char: "👨‍🔬", color: "from-teal-500 to-teal-600" },
-];
-
 export default function TeacherGroupPage() {
-    const [selectedClassroom, setSelectedClassroom] = useState("bio-101");
+    // Restored State
+    const [selectedClassroom, setSelectedClassroom] = useState<string>("");
     const [numberOfTables, setNumberOfTables] = useState("");
     const [tables, setTables] = useState<Table[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
@@ -89,94 +83,114 @@ export default function TeacherGroupPage() {
     const [assigningTable, setAssigningTable] = useState<Table | null>(null);
     const classroomRef = useRef<HTMLDivElement>(null);
 
-    const classrooms = [
-        { id: "bio-101", name: "Biology 101 - Period 1" },
-        { id: "chem-201", name: "Chemistry 201 - Period 3" },
-        { id: "physics-301", name: "Physics 301 - Period 5" },
-    ];
+    // New API State
+    const [classrooms, setClassrooms] = useState<any[]>([]);
+    const [allStudents, setAllStudents] = useState<Student[]>([]);
 
-    const [allStudents] = useState<Student[]>([
-        {
-            id: "1",
-            name: "Sarah Johnson",
-            initials: "SJ",
-            tableId: null,
-            avatar: studentAvatars[1].char,
-            color: studentAvatars[1].color,
-        },
-        {
-            id: "2",
-            name: "Michael Chen",
-            initials: "MC",
-            tableId: null,
-            avatar: studentAvatars[0].char,
-            color: studentAvatars[0].color,
-        },
-        {
-            id: "3",
-            name: "Emma Davis",
-            initials: "ED",
-            tableId: null,
-            avatar: studentAvatars[4].char,
-            color: studentAvatars[4].color,
-        },
-        {
-            id: "4",
-            name: "James Wilson",
-            initials: "JW",
-            tableId: null,
-            avatar: studentAvatars[3].char,
-            color: studentAvatars[3].color,
-        },
-        {
-            id: "5",
-            name: "Olivia Brown",
-            initials: "OB",
-            tableId: null,
-            avatar: studentAvatars[1].char,
-            color: studentAvatars[1].color,
-        },
-        {
-            id: "6",
-            name: "Lucas Martinez",
-            initials: "LM",
-            tableId: null,
-            avatar: studentAvatars[0].char,
-            color: studentAvatars[0].color,
-        },
-        {
-            id: "7",
-            name: "Sophia Lee",
-            initials: "SL",
-            tableId: null,
-            avatar: studentAvatars[4].char,
-            color: studentAvatars[4].color,
-        },
-        {
-            id: "8",
-            name: "Noah Anderson",
-            initials: "NA",
-            tableId: null,
-            avatar: studentAvatars[6].char,
-            color: studentAvatars[6].color,
-        },
-        {
-            id: "9",
-            name: "Ava Garcia",
-            initials: "AG",
-            tableId: null,
-            avatar: studentAvatars[7].char,
-            color: studentAvatars[7].color,
-        },
-        {
-            id: "10",
-            name: "Ethan Taylor",
-            initials: "ET",
-            tableId: null,
-            avatar: studentAvatars[2].char,
-            color: studentAvatars[2].color,
-        },
-    ]);
+    // Fetch classrooms on mount
+    useEffect(() => {
+        fetchWithAuth("/classrooms/")
+            .then((data) => {
+                setClassrooms(data);
+                if (data.length > 0 && !selectedClassroom) {
+                    setSelectedClassroom(data[0].id.toString());
+                }
+            })
+            .catch(console.error);
+    }, []);
+
+    // Fetch tables and students when classroom changes
+    useEffect(() => {
+        if (!selectedClassroom) return;
+
+        // Fetch classroom details for students
+        fetchWithAuth(`/classrooms/${selectedClassroom}/`)
+            .then((data) => {
+                const students = data.enrollments.map((en: any) => ({
+                    id: en.student.id.toString(),
+                    name: en.student.username, // or full name
+                    initials: en.student.username.substring(0, 2).toUpperCase(),
+                    tableId: en.assigned_table ? en.assigned_table.toString() : null, // Backend needs to send assigned_table in EnrollmentSerializer?
+                    avatar: "👨‍🎓",
+                    color: "from-blue-500 to-blue-600"
+                }));
+                // Wait, EnrollmentSerializer in backend does NOT include assigned_table yet?
+                // I added it to MODEL, but did I add it to SERIALIZER?
+                // Let's check serializer later. Assuming it's there or I need to add it.
+                setAllStudents(students);
+            });
+
+        // Fetch tables
+        groupsApi.getTables(selectedClassroom)
+            .then((data) => {
+                // Transform backend table to frontend shape
+                const formattedTables = data.map((t: any) => ({
+                    id: t.id.toString(),
+                    name: t.name,
+                    topic: "",
+                    students: t.students.map((s: any) => ({
+                        id: s.id.toString(),
+                        name: s.name,
+                        initials: s.initials,
+                        avatar: s.avatar,
+                        color: s.color
+                    })),
+                    messages: t.messages.map((m: any) => ({
+                        id: m.id.toString(),
+                        studentId: m.sender.toString(),
+                        studentName: m.sender_name,
+                        text: m.content,
+                        timestamp: new Date(m.timestamp)
+                    })),
+                    position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
+                }));
+                setTables(formattedTables);
+            });
+
+    }, [selectedClassroom]);
+
+    // Polling for messages if selectedTable
+    useEffect(() => {
+        if (!selectedTable) return;
+
+        const interval = setInterval(() => {
+            groupsApi.getMessages(selectedTable.id)
+                .then((msgs) => {
+                    // Update messages for this table
+                    setTables(prev => prev.map(t => {
+                        if (t.id === selectedTable.id) {
+                            const newMsgs = msgs.map((m: any) => ({
+                                id: m.id.toString(),
+                                studentId: m.sender.toString(),
+                                studentName: m.sender_name,
+                                text: m.content,
+                                timestamp: new Date(m.timestamp)
+                            }));
+                            return { ...t, messages: newMsgs };
+                        }
+                        return t;
+                    }));
+
+                    // Also update selectedTable state
+                    setSelectedTable(prev => {
+                        if (prev && prev.id === selectedTable.id) {
+                            const newMsgs = msgs.map((m: any) => ({
+                                id: m.id.toString(),
+                                studentId: m.sender.toString(),
+                                studentName: m.sender_name,
+                                text: m.content,
+                                timestamp: new Date(m.timestamp)
+                            }));
+                            return { ...prev, messages: newMsgs };
+                        }
+                        return prev;
+                    });
+                });
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [selectedTable]);
+
 
     useEffect(() => {
         setTables([]);
@@ -217,93 +231,126 @@ export default function TeacherGroupPage() {
 
     const handleCreateTables = () => {
         const num = parseInt(numberOfTables);
-        if (num > 0 && num <= 12) {
+        if (num > 0 && num <= 12 && selectedClassroom) {
             const newTables = generateClassroomLayout(num);
-            setTables(newTables);
 
-            let autoZoom = 1;
-            if (num >= 10) {
-                autoZoom = 0.6;
-            } else if (num >= 7) {
-                autoZoom = 0.75;
-            } else if (num >= 4) {
-                autoZoom = 0.9;
-            }
+            // Call API
+            groupsApi.replaceTables(selectedClassroom, newTables)
+                .then((createdTables: any[]) => {
+                    const formattedTables = createdTables.map((t: any) => ({
+                        id: t.id.toString(),
+                        name: t.name,
+                        topic: "",
+                        students: [],
+                        messages: [],
+                        position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
+                    }));
+                    setTables(formattedTables);
 
-            setZoom(autoZoom);
-
-            setTimeout(() => {
-                if (classroomRef.current) {
-                    const containerWidth = classroomRef.current.clientWidth;
-                    const containerHeight = classroomRef.current.clientHeight;
-
-                    const contentWidth = 1600;
-                    const contentHeight = 1700;
-
-                    const centerX = (containerWidth - contentWidth * autoZoom) / 2;
-                    const centerY = (containerHeight - contentHeight * autoZoom) / 2;
-
-                    setPan({ x: Math.max(0, centerX), y: Math.max(0, centerY) });
-                }
-            }, 0);
+                    // Auto zoom logic (same as before)
+                    let autoZoom = 1;
+                    if (num >= 10) autoZoom = 0.6;
+                    else if (num >= 7) autoZoom = 0.75;
+                    else if (num >= 4) autoZoom = 0.9;
+                    setZoom(autoZoom);
+                    // Reset pan/zoom
+                    setTimeout(() => {
+                        if (classroomRef.current) {
+                            const containerWidth = classroomRef.current.clientWidth;
+                            const containerHeight = classroomRef.current.clientHeight;
+                            const contentWidth = 1600;
+                            const contentHeight = 1700;
+                            const centerX = (containerWidth - contentWidth * autoZoom) / 2;
+                            const centerY = (containerHeight - contentHeight * autoZoom) / 2;
+                            setPan({ x: Math.max(0, centerX), y: Math.max(0, centerY) });
+                        }
+                    }, 0);
+                });
         }
     };
 
     const handleAssignStudent = (studentId: string, tableId: string) => {
-        const student = allStudents.find((s) => s.id === studentId);
-        if (!student) return;
+        if (!selectedClassroom) return;
 
-        setTables((prevTables) =>
-            prevTables.map((table) => {
-                const isInThisTable = table.id === tableId
-                    && table.students.some((s) => s.id === studentId);
+        groupsApi.assignStudent(selectedClassroom, studentId, tableId)
+            .then(() => {
+                // Determine previous table to remove student from locally, or just refresh?
+                // Refreshing tables is safer but slower.
+                // Optimistic update:
 
-                if (isInThisTable) {
-                    return {
-                        ...table,
-                        students: table.students.filter((s) => s.id !== studentId),
-                    };
-                }
+                setTables((prevTables) =>
+                    prevTables.map((table) => {
+                        const isInThisTable = table.students.some((s) => s.id === studentId);
+                        if (isInThisTable && table.id !== tableId) {
+                            return { ...table, students: table.students.filter((s) => s.id !== studentId) };
+                        }
+                        if (table.id === tableId && !table.students.some(s => s.id === studentId)) {
+                            const student = allStudents.find(s => s.id === studentId);
+                            return { ...table, students: [...table.students, student!] };
+                        }
+                        return table;
+                    })
+                );
 
-                const filteredStudents = table.students.filter((s) => s.id !== studentId);
-
-                if (table.id === tableId) {
-                    return {
-                        ...table,
-                        students: [...filteredStudents, { ...student, tableId }],
-                    };
-                }
-
-                return { ...table, students: filteredStudents };
-            })
-        );
+                // Refresh from server to be sure
+                groupsApi.getTables(selectedClassroom)
+                    .then((data) => {
+                        const formattedTables = data.map((t: any) => ({
+                            id: t.id.toString(),
+                            name: t.name,
+                            topic: "",
+                            students: t.students.map((s: any) => ({
+                                id: s.id.toString(),
+                                name: s.name,
+                                initials: s.initials,
+                                avatar: s.avatar,
+                                color: s.color
+                            })),
+                            messages: t.messages.map((m: any) => ({
+                                id: m.id.toString(),
+                                studentId: m.sender.toString(),
+                                studentName: m.sender_name,
+                                text: m.content,
+                                timestamp: new Date(m.timestamp)
+                            })),
+                            position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
+                        }));
+                        setTables(formattedTables);
+                    });
+            });
     };
 
 
     const handleSendMessage = () => {
         if (!selectedTable || !newMessage.trim()) return;
 
-        const message: Message = {
-            id: `msg-${Date.now()}`,
-            studentId: "teacher",
-            studentName: "Dr. Anderson (Teacher)",
-            text: newMessage,
-            timestamp: new Date(),
-        };
-
-        setTables((prevTables) =>
-            prevTables.map((table) =>
-                table.id === selectedTable.id
-                    ? { ...table, messages: [...table.messages, message] }
-                    : table
-            )
-        );
-
-        setSelectedTable((prev) =>
-            prev ? { ...prev, messages: [...prev.messages, message] } : null
-        );
-
-        setNewMessage("");
+        groupsApi.sendMessage(selectedTable.id, newMessage)
+            .then(() => {
+                setNewMessage("");
+                // Message list updates via polling or we could manually append
+                // Let's manually append for immediate feedback
+                /* 
+                const message: Message = {
+                    id: `temp-${Date.now()}`,
+                    studentId: "teacher", 
+                    studentName: "Teacher",
+                    text: newMessage,
+                    timestamp: new Date(),
+                };
+                */
+                // Refetch messages immediately
+                groupsApi.getMessages(selectedTable.id).then(msgs => {
+                    const newMsgs = msgs.map((m: any) => ({
+                        id: m.id.toString(),
+                        studentId: m.sender.toString(),
+                        studentName: m.sender_name,
+                        text: m.content,
+                        timestamp: new Date(m.timestamp)
+                    }));
+                    setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, messages: newMsgs } : t));
+                    setSelectedTable(prev => prev ? { ...prev, messages: newMsgs } : null);
+                });
+            });
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -756,10 +803,10 @@ function VirtualTable({
                                     <div
                                         key={student.id}
                                         className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${isInThisTable
-                                                ? "bg-teal-100 border border-teal-300"
-                                                : isInAnotherTable
-                                                    ? "bg-gray-100 text-gray-500"
-                                                    : "hover:bg-gray-50 border border-transparent"
+                                            ? "bg-teal-100 border border-teal-300"
+                                            : isInAnotherTable
+                                                ? "bg-gray-100 text-gray-500"
+                                                : "hover:bg-gray-50 border border-transparent"
                                             }`}
                                         onClick={() => onAssignStudent(student.id, table.id)}
                                     >

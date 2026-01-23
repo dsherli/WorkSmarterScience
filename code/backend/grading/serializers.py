@@ -4,7 +4,7 @@ Handles serialization for rubrics, submissions, and grading results.
 """
 
 from rest_framework import serializers
-from .models import Rubric, RubricCriterion, AssessmentSubmission, CriterionScore, GradingSession
+from .models import Rubric, RubricCriterion, AssessmentSubmission, CriterionScore, GradingSession, ActivityRubricMap
 
 
 class RubricCriterionSerializer(serializers.ModelSerializer):
@@ -111,3 +111,31 @@ class GradeSubmissionRequestSerializer(serializers.Serializer):
     
     submission_id = serializers.IntegerField(required=True, help_text="ID of the ScienceActivitySubmission")
     rubric_json = serializers.JSONField(required=False, help_text="Optional rubric JSON override")
+
+
+class ActivityRubricMapSerializer(serializers.ModelSerializer):
+    """Serializer for activity-to-rubric mappings."""
+    
+    rubric_title = serializers.CharField(source="rubric.title", read_only=True)
+    rubric_id = serializers.IntegerField(source="rubric.id", read_only=True)
+    
+    class Meta:
+        model = ActivityRubricMap
+        fields = [
+            "id", "activity_code", "rubric", "rubric_id", "rubric_title",
+            "assignment_id", "created_at"
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class RubricImportSerializer(serializers.Serializer):
+    """Request serializer for importing a rubric from JSON."""
+    
+    title = serializers.CharField(required=True)
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+    total_points = serializers.IntegerField(required=False, default=100)
+    criteria = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        default=list
+    )

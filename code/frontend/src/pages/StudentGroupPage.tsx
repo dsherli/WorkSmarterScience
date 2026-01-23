@@ -1,4 +1,5 @@
-﻿import { useState, useRef } from "react";
+﻿import React, { useState, useRef, useEffect } from "react";
+import { groupsApi, fetchWithAuth } from "../api/groups";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -65,159 +66,90 @@ const studentAvatars = [
 ];
 
 export default function GroupDiscussionStudent() {
-    const currentStudentId = "1";
-    const currentStudentName = "Alex Smith";
-    const currentStudentInitials = "AS";
-    const currentStudentAvatar = studentAvatars[2].char;
-    const currentStudentColor = studentAvatars[2].color;
+    const [currentClassroomId, setCurrentClassroomId] = useState<string | null>(null);
+    const [currentStudentId, setCurrentStudentId] = useState<string>("");
+    const [currentStudentName, setCurrentStudentName] = useState<string>("");
+    const [currentStudentInitials, setCurrentStudentInitials] = useState<string>("");
+    const [currentStudentAvatar, setCurrentStudentAvatar] = useState<string>("👨‍🎓");
+    const [currentStudentColor, setCurrentStudentColor] = useState<string>("from-blue-500 to-blue-600");
 
-    const [tables, setTables] = useState<Table[]>([
-        {
-            id: "table-1",
-            name: "Table 1",
-            topic: "Photosynthesis",
-            students: [
-                {
-                    id: "1",
-                    name: "Alex Smith",
-                    initials: "AS",
-                    avatar: studentAvatars[2].char,
-                    color: studentAvatars[2].color,
-                },
-                {
-                    id: "2",
-                    name: "Michael Chen",
-                    initials: "MC",
-                    avatar: studentAvatars[0].char,
-                    color: studentAvatars[0].color,
-                },
-                {
-                    id: "3",
-                    name: "Emma Davis",
-                    initials: "ED",
-                    avatar: studentAvatars[4].char,
-                    color: studentAvatars[4].color,
-                },
-            ],
-            messages: [
-                {
-                    id: "1",
-                    studentId: "2",
-                    studentName: "Michael Chen",
-                    text: "Hey team! Should we start discussing the light-dependent reactions?",
-                    timestamp: new Date(Date.now() - 300000),
-                    isMe: false,
-                },
-                {
-                    id: "2",
-                    studentId: "1",
-                    studentName: "Alex Smith",
-                    text: "Yes! I think we should focus on the role of chlorophyll first.",
-                    timestamp: new Date(Date.now() - 240000),
-                    isMe: true,
-                },
-                {
-                    id: "3",
-                    studentId: "3",
-                    studentName: "Emma Davis",
-                    text: "Good idea. I can explain how the pigments absorb light energy.",
-                    timestamp: new Date(Date.now() - 180000),
-                    isMe: false,
-                },
-            ],
-            position: { x: 280, y: 300, rotation: 0 },
-        },
-        {
-            id: "table-2",
-            name: "Table 2",
-            topic: "Cell Respiration",
-            students: [
-                {
-                    id: "4",
-                    name: "James Wilson",
-                    initials: "JW",
-                    avatar: studentAvatars[3].char,
-                    color: studentAvatars[3].color,
-                },
-                {
-                    id: "5",
-                    name: "Olivia Brown",
-                    initials: "OB",
-                    avatar: studentAvatars[1].char,
-                    color: studentAvatars[1].color,
-                },
-            ],
-            messages: [],
-            position: { x: 660, y: 300, rotation: 0 },
-        },
-        {
-            id: "table-3",
-            name: "Table 3",
-            topic: "DNA Structure",
-            students: [
-                {
-                    id: "6",
-                    name: "Lucas Martinez",
-                    initials: "LM",
-                    avatar: studentAvatars[0].char,
-                    color: studentAvatars[0].color,
-                },
-                {
-                    id: "7",
-                    name: "Sophia Lee",
-                    initials: "SL",
-                    avatar: studentAvatars[4].char,
-                    color: studentAvatars[4].color,
-                },
-                {
-                    id: "8",
-                    name: "Noah Anderson",
-                    initials: "NA",
-                    avatar: studentAvatars[6].char,
-                    color: studentAvatars[6].color,
-                },
-            ],
-            messages: [],
-            position: { x: 1040, y: 300, rotation: 0 },
-        },
-        {
-            id: "table-4",
-            name: "Table 4",
-            topic: "",
-            students: [],
-            messages: [],
-            position: { x: 280, y: 650, rotation: 0 },
-        },
-        {
-            id: "table-5",
-            name: "Table 5",
-            topic: "",
-            students: [
-                {
-                    id: "9",
-                    name: "Ava Garcia",
-                    initials: "AG",
-                    avatar: studentAvatars[7].char,
-                    color: studentAvatars[7].color,
-                },
-            ],
-            messages: [],
-            position: { x: 660, y: 650, rotation: 0 },
-        },
-        {
-            id: "table-6",
-            name: "Table 6",
-            topic: "",
-            students: [],
-            messages: [],
-            position: { x: 1040, y: 650, rotation: 0 },
-        },
-    ]);
+    const userIdRef = useRef<string>("");
+
+    // Fetch User and Classroom
+    useEffect(() => {
+        // Fetch User ID
+        fetchWithAuth("/auth/user/")
+            .then(user => {
+                const userId = user.id.toString();
+                userIdRef.current = userId;
+                setCurrentStudentId(userId);
+                setCurrentStudentName(user.username); // Or user.first_name check
+                setCurrentStudentInitials(user.username.substring(0, 2).toUpperCase());
+
+                // Fetch My Classroom (assume first enrollment)
+                // Or fetch /api/classrooms/ assuming student view returns enrolled classes
+                return fetchWithAuth("/classrooms/");
+            })
+            .then(classrooms => {
+                if (classrooms && classrooms.length > 0) {
+                    setCurrentClassroomId(classrooms[0].id.toString());
+                }
+            })
+            .catch(console.error);
+    }, []);
+
+    const [tables, setTables] = useState<Table[]>([]);
+
+    // Poll for tables (and messages)
+    useEffect(() => {
+        if (!currentClassroomId) return;
+
+        const fetchTables = () => {
+            groupsApi.getTables(currentClassroomId).then(data => {
+                const formattedTables = data.map((t: any) => ({
+                    id: t.id.toString(),
+                    name: t.name,
+                    topic: "",
+                    students: t.students.map((s: any) => ({
+                        id: s.id.toString(),
+                        name: s.name,
+                        initials: s.initials,
+                        avatar: s.avatar, // We need to generate avatar/color securely or consistently?
+                        color: s.color // Backend should provide these ideally, or use consistent hash
+                    })),
+                    messages: t.messages.map((m: any) => ({
+                        id: m.id.toString(),
+                        studentId: m.sender.toString(),
+                        studentName: m.sender_name,
+                        text: m.content,
+                        timestamp: new Date(m.timestamp),
+                        isMe: m.sender.toString() === userIdRef.current
+                    })),
+                    position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
+                }));
+                setTables(formattedTables);
+
+                // Determine current table based on where I am seated
+                const myTable = formattedTables.find((t: any) => t.students.some((s: any) => s.id === userIdRef.current));
+                if (myTable) {
+                    setCurrentTableId(myTable.id);
+                    setSelectedTable(myTable);
+                } else {
+                    setCurrentTableId("");
+                    // Keep selection if exploring
+                }
+            });
+        };
+
+        fetchTables();
+        const interval = setInterval(fetchTables, 3000); // Poll every 3s
+        return () => clearInterval(interval);
+    }, [currentClassroomId]);
 
     const [currentTableId, setCurrentTableId] =
-        useState("table-1");
+        useState("");
     const [selectedTable, setSelectedTable] =
-        useState<Table | null>(tables[0]);
+        useState<Table | null>(null);
     const [newMessage, setNewMessage] = useState("");
     const [tableToJoin, setTableToJoin] = useState<Table | null>(
         null,
@@ -238,77 +170,26 @@ export default function GroupDiscussionStudent() {
     };
 
     const handleJoinTable = () => {
-        if (!tableToJoin) return;
+        if (!tableToJoin || !currentClassroomId || !currentStudentId) return;
 
-        setTables((prevTables) =>
-            prevTables.map((table) => {
-                if (table.id === currentTableId) {
-                    return {
-                        ...table,
-                        students: table.students.filter(
-                            (s) => s.id !== currentStudentId,
-                        ),
-                    };
-                }
-
-                if (table.id === tableToJoin.id) {
-                    const alreadyInTable = table.students.some(
-                        (s) => s.id === currentStudentId,
-                    );
-                    if (!alreadyInTable) {
-                        return {
-                            ...table,
-                            students: [
-                                ...table.students,
-                                {
-                                    id: currentStudentId,
-                                    name: currentStudentName,
-                                    initials: currentStudentInitials,
-                                    avatar: currentStudentAvatar,
-                                    color: currentStudentColor,
-                                },
-                            ],
-                        };
-                    }
-                }
-
-                return table;
-            }),
-        );
-
-        setCurrentTableId(tableToJoin.id);
-        setSelectedTable(tableToJoin);
-        setShowMoveDialog(false);
-        setTableToJoin(null);
+        groupsApi.assignStudent(currentClassroomId, currentStudentId, tableToJoin.id)
+            .then(() => {
+                setShowMoveDialog(false);
+                setTableToJoin(null);
+                // State update happens via polling in next cycle
+                setCurrentTableId(tableToJoin.id);
+                setSelectedTable(tableToJoin);
+            });
     };
 
     const handleSendMessage = () => {
         if (!selectedTable || !newMessage.trim()) return;
 
-        const message: Message = {
-            id: `msg-${Date.now()}`,
-            studentId: currentStudentId,
-            studentName: currentStudentName,
-            text: newMessage,
-            timestamp: new Date(),
-            isMe: true,
-        };
-
-        setTables((prevTables) =>
-            prevTables.map((table) =>
-                table.id === selectedTable.id
-                    ? { ...table, messages: [...table.messages, message] }
-                    : table,
-            ),
-        );
-
-        setSelectedTable((prev) =>
-            prev
-                ? { ...prev, messages: [...prev.messages, message] }
-                : null,
-        );
-
-        setNewMessage("");
+        groupsApi.sendMessage(selectedTable.id, newMessage)
+            .then(() => {
+                setNewMessage("");
+                // Messages update via polling
+            });
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -481,8 +362,8 @@ export default function GroupDiscussionStudent() {
                         <div className="flex flex-col h-full">
                             <div
                                 className={`p-4 border-b ${selectedTable.id === currentTableId
-                                        ? "bg-gradient-to-r from-teal-50 to-cyan-50"
-                                        : "bg-gray-50"
+                                    ? "bg-gradient-to-r from-teal-50 to-cyan-50"
+                                    : "bg-gray-50"
                                     }`}
                             >
                                 <div className="flex items-center justify-between mb-2">
@@ -517,14 +398,14 @@ export default function GroupDiscussionStudent() {
                                         <div
                                             key={student.id}
                                             className={`flex items-center gap-2 p-2 rounded-lg ${student.id === currentStudentId
-                                                    ? "bg-teal-100 border border-teal-300"
-                                                    : "bg-gray-50"
+                                                ? "bg-teal-100 border border-teal-300"
+                                                : "bg-gray-50"
                                                 }`}
                                         >
                                             <div
                                                 className={`w-10 h-10 rounded-full bg-gradient-to-br ${student.color} flex items-center justify-center text-xl shadow-md ${student.id === currentStudentId
-                                                        ? "ring-2 ring-yellow-400"
-                                                        : ""
+                                                    ? "ring-2 ring-yellow-400"
+                                                    : ""
                                                     }`}
                                             >
                                                 {student.avatar}
@@ -568,8 +449,8 @@ export default function GroupDiscussionStudent() {
                                                 <div
                                                     key={message.id}
                                                     className={`space-y-1 ${message.isMe
-                                                            ? "text-right"
-                                                            : "text-left"
+                                                        ? "text-right"
+                                                        : "text-left"
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-2 text-xs">
@@ -596,8 +477,8 @@ export default function GroupDiscussionStudent() {
                                                     </div>
                                                     <div
                                                         className={`inline-block p-2 rounded-lg text-sm max-w-[80%] ${message.isMe
-                                                                ? "bg-teal-600 text-white"
-                                                                : "bg-gray-100"
+                                                            ? "bg-teal-600 text-white"
+                                                            : "bg-gray-100"
                                                             }`}
                                                     >
                                                         {message.text}
@@ -760,8 +641,8 @@ function VirtualTableStudent({
             >
                 <div
                     className={`relative w-full h-full rounded-full transition-all ${isMyTable
-                            ? "bg-gradient-to-br from-teal-400 via-cyan-400 to-blue-400 shadow-2xl ring-4 ring-teal-300"
-                            : "bg-gradient-to-br from-amber-700 via-amber-600 to-amber-800 shadow-xl hover:shadow-2xl"
+                        ? "bg-gradient-to-br from-teal-400 via-cyan-400 to-blue-400 shadow-2xl ring-4 ring-teal-300"
+                        : "bg-gradient-to-br from-amber-700 via-amber-600 to-amber-800 shadow-xl hover:shadow-2xl"
                         }`}
                     style={{
                         boxShadow: isMyTable
@@ -780,8 +661,8 @@ function VirtualTableStudent({
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div
                             className={`px-5 py-2 rounded-full text-base backdrop-blur-sm transition-all ${isMyTable
-                                    ? "bg-white/95 text-teal-700 ring-2 ring-white shadow-lg"
-                                    : "bg-amber-950/50 text-amber-100"
+                                ? "bg-white/95 text-teal-700 ring-2 ring-white shadow-lg"
+                                : "bg-amber-950/50 text-amber-100"
                                 }`}
                         >
                             {table.name}
@@ -809,8 +690,8 @@ function VirtualTableStudent({
                         <Badge
                             variant="secondary"
                             className={`text-sm shadow-md ${isMyTable
-                                    ? "bg-white text-teal-700"
-                                    : "bg-white/95 text-amber-900"
+                                ? "bg-white text-teal-700"
+                                : "bg-white/95 text-amber-900"
                                 }`}
                         >
                             <Users className="w-4 h-4 mr-1" />
@@ -872,8 +753,8 @@ function VirtualTableStudent({
                                 <div className="relative group/student">
                                     <div
                                         className={`w-16 h-16 rounded-full bg-gradient-to-br ${student.color} flex items-center justify-center text-3xl shadow-2xl hover:scale-125 transition-all cursor-pointer ${isMe
-                                                ? "ring-4 ring-yellow-400 animate-bounce-slow"
-                                                : "ring-3 ring-white hover:ring-teal-400"
+                                            ? "ring-4 ring-yellow-400 animate-bounce-slow"
+                                            : "ring-3 ring-white hover:ring-teal-400"
                                             }`}
                                         style={{
                                             boxShadow:

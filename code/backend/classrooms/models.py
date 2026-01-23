@@ -42,12 +42,48 @@ class Classroom(models.Model):
         super().save(*args, **kwargs)
 
 
+class ClassroomTable(models.Model):
+    classroom = models.ForeignKey(
+        Classroom, related_name="tables", on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=50)
+    x_position = models.FloatField(default=0)
+    y_position = models.FloatField(default=0)
+    rotation = models.FloatField(default=0)
+
+    class Meta:
+        db_table = "classroom_table"
+
+    def __str__(self):
+        return f"{self.name} - {self.classroom.name}"
+
+
+class TableMessage(models.Model):
+    table = models.ForeignKey(
+        ClassroomTable, related_name="messages", on_delete=models.CASCADE
+    )
+    sender = models.ForeignKey(User, related_name="table_messages", on_delete=models.CASCADE)
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "table_message"
+        ordering = ["timestamp"]
+
+
 class Enrollment(models.Model):
     classroom = models.ForeignKey(
         Classroom, related_name="enrollments", on_delete=models.CASCADE
     )
     student = models.ForeignKey(
         User, related_name="classroom_enrollments", on_delete=models.CASCADE
+    )
+    assigned_table = models.ForeignKey(
+        ClassroomTable,
+        related_name="students",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     joined_at = models.DateTimeField(auto_now_add=True)
 

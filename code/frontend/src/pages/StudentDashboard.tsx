@@ -52,32 +52,14 @@ const CLASS_CARD_COLORS = [
     "from-orange-500 to-yellow-500",
 ];
 
-const mockRecentActivity = [
-    {
-        id: 1,
-        type: "submission",
-        title: "Submitted Newton Laws Discussion",
-        time: "2 hours ago",
-        icon: CheckCircle2,
-        color: "text-green-500"
-    },
-    {
-        id: 2,
-        type: "ai-help",
-        title: "Asked AI for help on Cell Structure Quiz",
-        time: "4 hours ago",
-        icon: Bot,
-        color: "text-purple-500"
-    },
-    {
-        id: 3,
-        type: "grade",
-        title: "Received feedback on Chemical Bonding Lab",
-        time: "Yesterday",
-        icon: Award,
-        color: "text-blue-500"
-    }
-];
+type RecentActivity = {
+    id: number;
+    type: string;
+    title: string;
+    time: string | null;
+    color: string;
+    status: string;
+};
 
 export function StudentDashboard() {
     const { user, refresh } = useAuth();
@@ -91,6 +73,8 @@ export function StudentDashboard() {
     const [joiningClass, setJoiningClass] = useState<boolean>(false);
     const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
     const [joinError, setJoinError] = useState<string | null>(null);
+    const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+    const [loadingActivity, setLoadingActivity] = useState<boolean>(true);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -262,6 +246,77 @@ export function StudentDashboard() {
     useEffect(() => {
         fetchClasses();
     }, [fetchClasses]);
+
+    // Fetch recent activity
+    useEffect(() => {
+        const fetchRecentActivity = async () => {
+            setLoadingActivity(true);
+            try {
+                const token = localStorage.getItem("access_token");
+                if (!token) {
+                    setRecentActivity([]);
+                    return;
+                }
+
+                const response = await fetch("/api/classrooms/student/recent-activity/", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to load recent activity");
+                }
+
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    const formatted = data.map((item: any): RecentActivity => ({
+                        id: item.id,
+                        type: item.type || "submission",
+                        title: item.title || "Activity",
+                        time: item.time ? formatTimeAgo(item.time) : "Recently",
+                        color: item.color || "text-green-500",
+                        status: item.status || "submitted",
+                    }));
+                    setRecentActivity(formatted);
+                }
+            } catch (error) {
+                console.error("Failed to load recent activity", error);
+                setRecentActivity([]);
+            } finally {
+                setLoadingActivity(false);
+            }
+        };
+
+        fetchRecentActivity();
+    }, []);
+
+    // Helper function to format time ago
+    const formatTimeAgo = (isoString: string): string => {
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 60) return `${diffMins} minutes ago`;
+        if (diffHours < 24) return `${diffHours} hours ago`;
+        if (diffDays === 1) return "Yesterday";
+        return `${diffDays} days ago`;
+    };
+
+    // Get icon for activity type
+    const getActivityIcon = (type: string) => {
+        switch (type) {
+            case "grade":
+                return Award;
+            case "ai-help":
+                return Bot;
+            default:
+                return CheckCircle2;
+        }
+    };
 
     const handleJoinClass = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -503,8 +558,14 @@ export function StudentDashboard() {
                                 <h2 className="text-xl">Recent Activity</h2>
                             </div>
                             <div className="space-y-3">
-                                {mockRecentActivity.map((activity) => {
-                                    const IconComponent = activity.icon;
+                                {loadingActivity && (
+                                    <p className="text-sm text-gray-500">Loading activity...</p>
+                                )}
+                                {!loadingActivity && recentActivity.length === 0 && (
+                                    <p className="text-sm text-gray-500">No recent activity yet.</p>
+                                )}
+                                {!loadingActivity && recentActivity.map((activity) => {
+                                    const IconComponent = getActivityIcon(activity.type);
                                     return (
                                         <div key={activity.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                                             <div className={`w-10 h-10 rounded-full bg-white flex items-center justify-center ${activity.color}`}>
@@ -678,8 +739,14 @@ export function StudentDashboard() {
                     <Card className="p-6">
                         <h2 className="text-xl mb-4">Your Learning Activity</h2>
                         <div className="space-y-4">
-                            {mockRecentActivity.map((activity) => {
-                                const IconComponent = activity.icon;
+                            {loadingActivity && (
+                                <p className="text-sm text-gray-500">Loading activity...</p>
+                            )}
+                            {!loadingActivity && recentActivity.length === 0 && (
+                                <p className="text-sm text-gray-500">No activity recorded yet. Start by completing an assignment!</p>
+                            )}
+                            {!loadingActivity && recentActivity.map((activity) => {
+                                const IconComponent = getActivityIcon(activity.type);
                                 return (
                                     <div key={activity.id} className="flex items-center gap-4 p-4 border rounded-lg">
                                         <div className={`w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center ${activity.color}`}>

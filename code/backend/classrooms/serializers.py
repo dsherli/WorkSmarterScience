@@ -25,7 +25,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Enrollment
-        fields = ["id", "student", "joined_at"]
+        fields = ["id", "student", "joined_at", "assigned_table"]
         read_only_fields = ["id", "student", "joined_at"]
 
 
@@ -332,3 +332,58 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
 
     def get_lp_text(self, obj):
         return self._get_activity_meta(obj).get("lp_text")
+
+
+from .models import ClassroomTable, TableMessage
+
+class TableMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source="sender.get_full_name", read_only=True)
+    sender_avatar = serializers.SerializerMethodField()
+    is_me = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TableMessage
+        fields = ["id", "table", "sender", "sender_name", "sender_avatar", "content", "timestamp", "is_me"]
+        read_only_fields = ["id", "sender", "timestamp", "sender_name", "sender_avatar", "is_me"]
+
+    def get_sender_avatar(self, obj):
+        # Placeholder for avatar logic
+        return "👨‍🎓"
+
+    def get_is_me(self, obj):
+        request = self.context.get("request")
+        if request and request.user:
+            return obj.sender == request.user
+        return False
+
+class ClassroomTableSerializer(serializers.ModelSerializer):
+    students = serializers.SerializerMethodField()
+    messages = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClassroomTable
+        fields = ["id", "classroom", "name", "x_position", "y_position", "rotation", "students", "messages"]
+        read_only_fields = ["id", "classroom", "students", "messages"]
+
+    def get_students(self, obj):
+        # Return students assigned to this table
+        # We need to look up Enrollments that have this table assigned
+        enrollments = obj.students.all().select_related("student")
+        return [
+            {
+                "id": en.student.id,
+                "name": en.student.get_full_name() or en.student.username,
+                "initials": (en.student.first_name[:1] + en.student.last_name[:1]).upper() if en.student.first_name and en.student.last_name else en.student.username[:2].upper(),
+                "avatar": "👨‍🎓", # Placeholder
+                "color": "from-blue-500 to-blue-600" # Placeholder
+            }
+            for en in enrollments
+        ]
+
+    def get_messages(self, obj):
+        # Return recent messages (e.g. last 50)
+        messages = obj.messages.order_by("-timestamp")[:50]
+        # Reverse to show chronological order
+        reversed_msgs = list(reversed(messages))
+        return TableMessageSerializer(reversed_msgs, many=True, context=self.context).data
+

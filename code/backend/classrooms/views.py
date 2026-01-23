@@ -1,4 +1,6 @@
+from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 
 from rest_framework import generics, permissions, serializers, status
@@ -6,12 +8,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from activities.models import ScienceActivity, ScienceActivitySubmission
+from grading.models import GradingSession
 
 from .models import (
     Classroom,
     Enrollment,
     ClassroomActivity,
     ClassroomActivityAssignment,
+    ClassroomTable,
+    TableMessage,
 )
 from .serializers import (
     ClassroomSerializer,
@@ -20,6 +25,8 @@ from .serializers import (
     ClassroomActivitySummarySerializer,
     ClassroomActivityAssignmentSubmissionSerializer,
     StudentAssignmentSerializer,
+    ClassroomTableSerializer,
+    TableMessageSerializer,
 )
 
 
@@ -289,13 +296,419 @@ class StudentAssignmentListView(generics.ListAPIView):
             .order_by("due_at", "classroom_activity__assigned_at")
         )
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        activity_ids = [
-            assignment.classroom_activity.activity_id for assignment in queryset
-        ]
-        activity_map = _activity_metadata(activity_ids)
-        serializer = self.get_serializer(
-            queryset, many=True, context={"activity_map": activity_map}
-        )
+
+class TeacherDashboardStatsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        classrooms = Classroom.objects.filter(created_by=user)
+        
+        # Calculate stats
+        total_students = Enrollment.objects.filter(classroom__in=classrooms).values("student").distinct().count()
+        active_activities = ClassroomActivity.objects.filter(classroom__in=classrooms).count()
+        
+        # Calculate average completion rate
+        total_assignments = ClassroomActivityAssignment.objects.filter(
+            classroom_activity__classroom__in=classrooms
+        ).count()
+        
+        completed_assignments = ClassroomActivityAssignment.objects.filter(
+            classroom_activity__classroom__in=classrooms,
+            status__in=["submitted", "completed"]
+        ).count()
+        
+        avg_completion = 0
+        if total_assignments > 0:
+            avg_completion = round((completed_assignments / total_assignments) * 100)
+        
+        # Count AI interactions (grading sessions by this teacher)
+        ai_interactions = GradingSession.objects.filter(user=user).count()
+        
+        return Response({
+            "totalStudents": total_students,
+            "activeActivities": active_activities,
+            "avgCompletion": avg_completion,
+            "aiInteractions": ai_interactions
+        })
+
+class TeacherDashboardActivitiesView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        classrooms = Classroom.objects.filter(created_by=user)
+        
+        # Get activity IDs assigned to the teacher's classrooms
+        classroom_activity_ids = ClassroomActivity.objects.filter(
+            classroom__in=classrooms
+        ).values_list("activity_id", flat=True)
+        
+        # Get recent submissions for those activities
+        recent_submissions = ScienceActivitySubmission.objects.filter(
+            activity__activity_id__in=classroom_activity_ids
+        ).select_related("activity", "student").order_by("-submitted_at")[:10]
+        
+        activities = []
+        for submission in recent_submissions:
+            activities.append({
+                "id": submission.id,
+                "type": "submission",
+                "title": f"{submission.student.first_name or submission.student.username} submitted {submission.activity.activity_title or 'Activity'}",
+                "time": submission.submitted_at.isoformat() if submission.submitted_at else None,
+                "student": {
+                    "id": submission.student.id,
+                    "name": f"{submission.student.first_name or ''} {submission.student.last_name or ''}".strip() or submission.student.username,
+                },
+                "activity": {
+                    "id": submission.activity.id,
+                    "activity_id": submission.activity.activity_id,
+                    "title": submission.activity.activity_title,
+                },
+                "status": submission.status,
+            })
+        
+        return Response(activities)
+
+class TeacherDashboardReviewsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        classrooms = Classroom.objects.filter(created_by=user)
+        
+        # Get activity IDs assigned to the teacher's classrooms
+        classroom_activity_ids = ClassroomActivity.objects.filter(
+            classroom__in=classrooms
+        ).values_list("activity_id", flat=True)
+        
+        # Get submissions that need review (submitted but not graded)
+        needs_review = ScienceActivitySubmission.objects.filter(
+            activity__activity_id__in=classroom_activity_ids,
+            status="submitted"
+        ).select_related("activity", "student").order_by("-submitted_at")[:20]
+        
+        reviews = []
+        for submission in needs_review:
+            reviews.append({
+                "id": submission.id,
+                "type": "needs_review",
+                "title": f"Review {submission.student.first_name or submission.student.username}'s submission",
+                "time": submission.submitted_at.isoformat() if submission.submitted_at else None,
+                "student": {
+                    "id": submission.student.id,
+                    "name": f"{submission.student.first_name or ''} {submission.student.last_name or ''}".strip() or submission.student.username,
+                },
+                "activity": {
+                    "id": submission.activity.id,
+                    "activity_id": submission.activity.activity_id,
+                    "title": submission.activity.activity_title,
+                },
+                "status": submission.status,
+            })
+        
+        return Response(reviews)
+
+
+class StudentRecentActivityView(APIView):
+    """Return recent activity for the current student."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # Get the student's recent submissions
+        recent_submissions = ScienceActivitySubmission.objects.filter(
+            student=user
+        ).select_related("activity").order_by("-submitted_at")[:10]
+        
+        activities = []
+        for submission in recent_submissions:
+            activity_type = "submission"
+            title = f"Submitted {submission.activity.activity_title or 'Activity'}"
+            color = "text-green-500"
+            
+            if submission.status == "graded":
+                activity_type = "grade"
+                title = f"Received feedback on {submission.activity.activity_title or 'Activity'}"
+                color = "text-blue-500"
+            
+            activities.append({
+                "id": submission.id,
+                "type": activity_type,
+                "title": title,
+                "time": submission.submitted_at.isoformat() if submission.submitted_at else None,
+                "color": color,
+                "activity": {
+                    "id": submission.activity.id,
+                    "activity_id": submission.activity.activity_id,
+                    "title": submission.activity.activity_title,
+                },
+                "status": submission.status,
+            })
+        
+        return Response(activities)
+
+
+class AddStudentView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        email = request.data.get("email")
+        classroom_id = request.data.get("classroom_id")
+        
+        if not email:
+            return Response({"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        User = get_user_model()
+        
+        try:
+            student = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Student not found with that email"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # If classroom_id provided, use that classroom; otherwise pick the first one
+        if classroom_id:
+            classroom = get_object_or_404(
+                Classroom, pk=classroom_id, created_by=request.user
+            )
+        else:
+            classroom = Classroom.objects.filter(created_by=request.user).first()
+            if not classroom:
+                return Response(
+                    {"detail": "No classroom found for this teacher"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Check if already enrolled
+        if Enrollment.objects.filter(classroom=classroom, student=student).exists():
+            return Response(
+                {"detail": "Student already enrolled"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        Enrollment.objects.create(classroom=classroom, student=student)
+        
+        return Response({
+            "detail": f"Student {student.username} added to {classroom.name}",
+            "student": {
+                "id": student.id,
+                "username": student.username,
+                "email": student.email,
+            },
+            "classroom": {
+                "id": classroom.id,
+                "name": classroom.name,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class ClassroomTableListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, classroom_id):
+        tables = ClassroomTable.objects.filter(classroom_id=classroom_id)
+        serializer = ClassroomTableSerializer(tables, many=True)
         return Response(serializer.data)
+
+    def post(self, request, classroom_id):
+        # Handle bulk creation of tables
+        classroom = get_object_or_404(Classroom, pk=classroom_id, created_by=request.user)
+        
+        data = request.data
+        if isinstance(data, list):
+            # Bulk create
+            tables_to_create = []
+            for item in data:
+                tables_to_create.append(ClassroomTable(
+                    classroom=classroom,
+                    name=item.get("name"),
+                    x_position=item.get("position", {}).get("x", 0),
+                    y_position=item.get("position", {}).get("y", 0),
+                    rotation=item.get("position", {}).get("rotation", 0),
+                ))
+            
+            # Delete existing tables if needed? Or just append?
+            # User flow implies "Create" replaces old setup or adds to it? 
+            # Frontend: "setTables(newTables)" implies replacement locally.
+            # Backend should probably clear existing tables if replacing layout.
+            # Let's assume we clear existing tables for this classroom if param 'replace' is true
+            if request.query_params.get("replace") == "true":
+                ClassroomTable.objects.filter(classroom=classroom).delete()
+
+            created_tables = ClassroomTable.objects.bulk_create(tables_to_create)
+            serializer = ClassroomTableSerializer(created_tables, many=True)
+            return Response(serializer.data, status=201)
+        else:
+            # Single create
+            serializer = ClassroomTableSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save(classroom=classroom)
+                return Response(serializer.data, status=201)
+            return Response(serializer.errors, status=400)
+
+class ClassroomTableDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = ClassroomTable.objects.all()
+    serializer_class = ClassroomTableSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = "pk"
+
+    def perform_update(self, serializer):
+        # Allow updating position/rotation directly
+        serializer.save()
+
+class AssignStudentToTableView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, classroom_id):
+        student_id = request.data.get("student_id")
+        table_id = request.data.get("table_id")
+        
+        classroom = get_object_or_404(Classroom, pk=classroom_id)
+        
+        # Verify enrollment
+        enrollment = get_object_or_404(Enrollment, classroom=classroom, student_id=student_id)
+        
+        if table_id:
+            table = get_object_or_404(ClassroomTable, pk=table_id, classroom=classroom)
+            enrollment.assigned_table = table
+        else:
+            enrollment.assigned_table = None # Unassign
+            
+        enrollment.save()
+        return Response({"status": "assigned" if table_id else "unassigned"}, status=200)
+
+class TableMessageListCreateView(generics.ListCreateAPIView):
+    serializer_class = TableMessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None # Simple polling, no pagination for now
+
+    def get_queryset(self):
+        table_id = self.kwargs.get("table_id")
+        return TableMessage.objects.filter(table_id=table_id).select_related("sender").order_by("timestamp")
+
+    def perform_create(self, serializer):
+        table_id = self.kwargs.get("table_id")
+        table = get_object_or_404(ClassroomTable, pk=table_id)
+        serializer.save(sender=self.request.user, table=table)
+
+
+class SimilarResponseGroupsView(APIView):
+    """
+    Analyze student submissions and group them by similarity based on scores.
+    Groups students into: High Understanding, Developing, Basic Understanding
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, classroom_id, activity_id):
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=request.user
+        )
+        
+        # Get all submissions for this activity
+        submissions = ScienceActivitySubmission.objects.filter(
+            activity__activity_id=activity_id,
+            status__in=["submitted", "graded"]
+        ).select_related("student", "activity")
+        
+        # Build groups based on score ranges
+        high_group = {
+            "id": 1,
+            "name": "High Understanding Group",
+            "count": 0,
+            "avgScore": 0,
+            "keyThemes": [],
+            "studentIds": [],
+            "students": [],
+        }
+        developing_group = {
+            "id": 2,
+            "name": "Developing Understanding",
+            "count": 0,
+            "avgScore": 0,
+            "keyThemes": [],
+            "studentIds": [],
+            "students": [],
+        }
+        basic_group = {
+            "id": 3,
+            "name": "Basic Understanding",
+            "count": 0,
+            "avgScore": 0,
+            "keyThemes": [],
+            "studentIds": [],
+            "students": [],
+        }
+        
+        high_scores = []
+        developing_scores = []
+        basic_scores = []
+        
+        for submission in submissions:
+            score = float(submission.score) if submission.score else 0
+            student_info = {
+                "id": submission.student.id,
+                "name": f"{submission.student.first_name or ''} {submission.student.last_name or ''}".strip() or submission.student.username,
+            }
+            
+            if score >= 80:
+                high_group["studentIds"].append(str(submission.student.id))
+                high_group["students"].append(student_info)
+                high_scores.append(score)
+            elif score >= 60:
+                developing_group["studentIds"].append(str(submission.student.id))
+                developing_group["students"].append(student_info)
+                developing_scores.append(score)
+            else:
+                basic_group["studentIds"].append(str(submission.student.id))
+                basic_group["students"].append(student_info)
+                basic_scores.append(score)
+        
+        # Calculate counts and averages
+        high_group["count"] = len(high_scores)
+        developing_group["count"] = len(developing_scores)
+        basic_group["count"] = len(basic_scores)
+        
+        if high_scores:
+            high_group["avgScore"] = round(sum(high_scores) / len(high_scores))
+            high_group["keyThemes"] = [
+                "Strong understanding of concepts",
+                "Detailed explanations",
+                "Correct use of terminology",
+            ]
+        
+        if developing_scores:
+            developing_group["avgScore"] = round(sum(developing_scores) / len(developing_scores))
+            developing_group["keyThemes"] = [
+                "Partial understanding",
+                "Some missing details",
+                "Room for improvement",
+            ]
+        
+        if basic_scores:
+            basic_group["avgScore"] = round(sum(basic_scores) / len(basic_scores))
+            basic_group["keyThemes"] = [
+                "Surface-level explanation",
+                "Missing key details",
+                "Needs elaboration",
+            ]
+        
+        # Only include groups with students
+        groups = []
+        if high_group["count"] > 0:
+            groups.append(high_group)
+        if developing_group["count"] > 0:
+            groups.append(developing_group)
+        if basic_group["count"] > 0:
+            groups.append(basic_group)
+        
+        return Response({
+            "classroom_id": classroom.id,
+            "activity_id": activity_id,
+            "total_submissions": submissions.count(),
+            "groups": groups,
+        })
+

@@ -48,45 +48,38 @@ const editClassroomSchema = z.object({
     description: z.string().optional(),
 });
 
-const mockActivities = [
-    {
-        id: 1,
-        title: "Cell Structure and Function Quiz (Mock)",
-        classroom: "Biology 101",
-        submitted: 24,
-        total: 28,
-        needsReview: 5,
-        dueDate: "Today, 3:00 PM",
-        status: "open"
-    },
-    {
-        id: 3,
-        title: "Chemical Reactions Worksheet (Mock)",
-        classroom: "Chemistry 201",
-        submitted: 24,
-        total: 24,
-        needsReview: 0,
-        dueDate: "Yesterday",
-        status: "closed"
-    },
-];
+interface DashboardStats {
+    total_students: number;
+    active_activities: number;
+    avg_completion: number;
+    ai_interactions: number;
+}
 
-const mockRecentFeedback = [
-    {
-        id: 1,
-        student: "Emma Johnson",
-        activity: "Cell Structure Quiz (Mock)",
-        aiScore: 85,
-        status: "pending"
-    },
-    {
-        id: 2,
-        student: "Liam Smith",
-        activity: "Photosynthesis Lab (Mock)",
-        aiScore: 92,
-        status: "pending"
-    },
-];
+interface DashboardActivity {
+    id: number;
+    title: string;
+    classroom: string;
+    submitted: number;
+    total: number;
+    needsReview: number;
+    dueDate: string | null;
+    status: "open" | "closed";
+}
+
+interface DashboardReview {
+    id: number;
+    student: string;
+    activity: string;
+    aiScore: number | null;
+    status: string;
+}
+
+const mockStats: DashboardStats = {
+    total_students: 0,
+    active_activities: 0,
+    avg_completion: 0,
+    ai_interactions: 0,
+};
 
 export function TeacherDashboard() {
     const { user } = useAuth();
@@ -95,6 +88,11 @@ export function TeacherDashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [isCreateClassroomOpen, setIsCreateClassroomOpen] = useState(false);
     const [selectedClassroomCode, setSelectedClassroomCode] = useState<string | null>(null);
+    const [stats, setStats] = useState<DashboardStats>(mockStats);
+    const [recentActivities, setRecentActivities] = useState<DashboardActivity[]>([]);
+    const [pendingReviews, setPendingReviews] = useState<DashboardReview[]>([]);
+
+    // Add student
     const [isAddStudentsOpen, setIsAddStudentsOpen] = useState(false);
     const [studentEmail, setStudentEmail] = useState("");
     const [addedStudents, setAddedStudents] = useState<string[]>([]);
@@ -139,6 +137,39 @@ export function TeacherDashboard() {
 
     //--------------------------------------------------------- classroom -----------------------------------------------------
 
+    const fetchDashboardData = async () => {
+        const token = localStorage.getItem("access_token");
+        if (!token) return;
+
+        try {
+            // Stats
+            const statsRes = await fetch("/api/classrooms/dashboard/stats/", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (statsRes.ok) setStats(await statsRes.json());
+
+            // Recent Activities
+            const actsRes = await fetch("/api/classrooms/dashboard/recent-activity/", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (actsRes.ok) {
+                // Transform backend data to match UI interface if needed
+                // Backend returns: { id, title, classroom, submitted, total, needsReview, dueDate, status }
+                const data = await actsRes.json();
+                setRecentActivities(data);
+            }
+
+            // Pending Reviews
+            const reviewsRes = await fetch("/api/classrooms/dashboard/needs-review/", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (reviewsRes.ok) setPendingReviews(await reviewsRes.json());
+
+        } catch (e) {
+            console.error("Failed to fetch dashboard data", e);
+        }
+    };
+
     const fetchClassrooms = async () => {
         const token = localStorage.getItem("access_token");
         if (!token) return toast.error("Not authenticated");
@@ -153,9 +184,9 @@ export function TeacherDashboard() {
                 const data = await res.json();
 
                 const filtered = data
-                    .filter((c) => c.status !== "deleted")
-                    .sort((a, b) => {
-                        const order = { active: 1, archived: 2 };
+                    .filter((c: any) => c.status !== "deleted")
+                    .sort((a: any, b: any) => {
+                        const order: Record<string, number> = { active: 1, archived: 2 };
                         if (order[a.status] !== order[b.status]) {
                             return order[a.status] - order[b.status];
                         }
@@ -175,6 +206,7 @@ export function TeacherDashboard() {
 
     useEffect(() => {
         fetchClassrooms();
+        fetchDashboardData();
     }, []);
 
     const handleCreateClassroom = async (values) => {
@@ -309,14 +341,38 @@ export function TeacherDashboard() {
 
     //--------------------------------------------------------- student -----------------------------------------------------
 
-    const handleAddStudent = (e: React.FormEvent) => {
+    const handleAddStudent = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (studentEmail && studentEmail.includes('@')) {
-            setAddedStudents([...addedStudents, studentEmail]);
-            setStudentEmail("");
-            toast.success("Student added!", {
-                description: `${studentEmail} has been added to the list.`,
+        const token = localStorage.getItem("access_token");
+        if (!token) return toast.error("Not authenticated");
+
+        if (!studentEmail || !studentEmail.includes('@')) {
+            return toast.error("Please enter a valid email");
+        }
+
+        try {
+            const res = await fetch("/api/classrooms/add-student/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ email: studentEmail }),
             });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                setAddedStudents(prev => [...prev, studentEmail]); // Keep local list for UX
+                setStudentEmail("");
+                toast.success(data.detail);
+                // Refresh stats
+                fetchDashboardData();
+            } else {
+                toast.error(data.detail || "Failed to add student");
+            }
+        } catch {
+            toast.error("Network error adding student");
         }
     };
 
@@ -337,28 +393,28 @@ export function TeacherDashboard() {
                 <StatCard
                     icon={<Users className="w-5 h-5" />}
                     label="Total Students"
-                    value="100 (Mock)"
-                    change="+4 this week"
+                    value={stats.total_students.toString()}
+                    change="Enrolled"
                     color="bg-blue-500"
                 />
                 <StatCard
                     icon={<BookOpen className="w-5 h-5" />}
                     label="Active Activities"
-                    value="10 (Mock)"
-                    change="3 due today"
+                    value={stats.active_activities.toString()}
+                    change="Assignments"
                     color="bg-purple-500"
                 />
                 <StatCard
                     icon={<CheckCircle2 className="w-5 h-5" />}
                     label="Avg Completion"
-                    value="87% (Mock)"
-                    change="+5 percent from last week"
+                    value={`${stats.avg_completion}%`}
+                    change="Overall"
                     color="bg-green-500"
                 />
                 <StatCard
                     icon={<MessageSquare className="w-5 h-5" />}
                     label="AI Interactions"
-                    value="234 (Mock)"
+                    value={stats.ai_interactions.toString()}
                     change="Today"
                     color="bg-orange-500"
                 />
@@ -378,41 +434,49 @@ export function TeacherDashboard() {
                         {/* Recent Activities */}
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl">Recent Activities (Mock 11-04-25)</h2>
+                                <h2 className="text-xl">Recent Activities</h2>
                                 <Button size="sm" variant="ghost">View All</Button>
                             </div>
                             <div className="space-y-3">
-                                {mockActivities.slice(0, 3).map((activity) => (
-                                    <ActivityItem key={activity.id} activity={activity} />
-                                ))}
+                                {recentActivities.length === 0 ? (
+                                    <p className="text-gray-500 text-sm">No recent activities.</p>
+                                ) : (
+                                    recentActivities.map((activity) => (
+                                        <ActivityItem key={activity.id} activity={activity} />
+                                    ))
+                                )}
                             </div>
                         </Card>
 
                         {/* Pending Reviews */}
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl">Pending Reviews (Mock 11-04-25)</h2>
+                                <h2 className="text-xl">Pending Reviews</h2>
                                 <Button size="sm" variant="ghost">View All</Button>
                             </div>
                             <div className="space-y-3">
-                                {mockRecentFeedback.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <Avatar>
-                                                <AvatarFallback>{item.student.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                                            </Avatar>
-                                            <div>
-                                                <div>{item.student}</div>
-                                                <div className="text-sm text-gray-500">{item.activity}</div>
+                                {pendingReviews.length === 0 ? (
+                                    <p className="text-gray-500 text-sm">No pending reviews.</p>
+                                ) : (
+                                    pendingReviews.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                            <div className="flex items-center gap-3">
+                                                <Avatar>
+                                                    <AvatarFallback>{item.student.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                                                </Avatar>
+                                                <div>
+                                                    <div>{item.student}</div>
+                                                    <div className="text-sm text-gray-500">{item.activity}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button size="sm" variant="outline" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                                                    Review
+                                                </Button>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <Button size="sm" variant="outline" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                                                Review
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </Card>
                     </div>
@@ -533,7 +597,7 @@ export function TeacherDashboard() {
                 {/* Activities */}
                 <TabsContent value="activities">
                     <div className="space-y-3">
-                        {mockActivities.map((activity) => (
+                        {recentActivities.map((activity) => (
                             <Card key={activity.id} className="p-4">
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
@@ -547,7 +611,7 @@ export function TeacherDashboard() {
                                             <span>{activity.classroom}</span>
                                             <span className="flex items-center gap-1">
                                                 <Clock className="w-4 h-4" />
-                                                {activity.dueDate}
+                                                {activity.dueDate ? new Date(activity.dueDate).toLocaleDateString() : "No Due Date"}
                                             </span>
                                         </div>
                                     </div>
@@ -565,7 +629,7 @@ export function TeacherDashboard() {
                     <Card className="p-6">
                         <h2 className="text-xl mb-4">AI Feedback Awaiting Review</h2>
                         <div className="space-y-3">
-                            {mockActivities.filter(a => a.needsReview > 0).map((activity) => (
+                            {recentActivities.filter(a => a.needsReview > 0).map((activity) => (
                                 <div key={activity.id} className="p-4 border rounded-lg">
                                     <div className="flex items-center justify-between">
                                         <div>
@@ -947,25 +1011,28 @@ function StatCard({ icon, label, value, change, color }: StatCardProps) {
 }
 
 interface ActivityItemProps {
-    activity: typeof mockActivities[0];
+    activity: DashboardActivity;
 }
 
 function ActivityItem({ activity }: ActivityItemProps) {
     return (
-        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-            <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                    <span>{activity.title}</span>
-                    {activity.needsReview > 0 && (
-                        <Badge variant="destructive" className="text-xs">
-                            {activity.needsReview} to review
-                        </Badge>
-                    )}
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div>
+                <div className="font-medium">{activity.title}</div>
+                <div className="text-sm text-gray-500">
+                    {activity.classroom} • Due: {activity.dueDate ? new Date(activity.dueDate).toLocaleDateString() : "No Due Date"}
                 </div>
-                <div className="text-sm text-gray-500">{activity.classroom} • Due {activity.dueDate}</div>
             </div>
-            <div className="text-sm text-gray-600">
-                {activity.submitted}/{activity.total}
+            <div className="flex items-center gap-4">
+                <div className="text-right">
+                    <div className="text-sm font-medium">{activity.submitted}/{activity.total}</div>
+                    <div className="text-xs text-gray-500">Submitted</div>
+                </div>
+                {activity.needsReview > 0 && (
+                    <Badge variant="destructive" className="h-6">
+                        {activity.needsReview}
+                    </Badge>
+                )}
             </div>
         </div>
     );

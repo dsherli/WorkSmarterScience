@@ -12,7 +12,9 @@ import json
 logger = logging.getLogger(__name__)
 
 
-def _parse_bool(value: str | None) -> bool | None:
+from typing import Optional
+
+def _parse_bool(value: Optional[str]) -> Optional[bool]:
     if value is None:
         return None
     normalized = value.strip().lower()

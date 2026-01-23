@@ -11,32 +11,15 @@ import { ArrowLeft, CheckCircle2, Clock, Calendar, Users, MessageSquare, Send, B
 import { gradeSubmission } from '../services/aiService';
 import type { ScienceActivitySubmission, ActivityAnswer } from './types';
 
-const similarGroups = [
-    {
-        id: 1,
-        name: 'High Understanding Group',
-        count: 2,
-        avgScore: 90,
-        keyThemes: ['Detailed stages explanation', 'Mentioned chloroplasts', 'Light and Calvin cycle'],
-        studentIds: ['1', '2'],
-    },
-    {
-        id: 2,
-        name: 'Advanced Comprehension',
-        count: 2,
-        avgScore: 90,
-        keyThemes: ['ATP and NADPH mentioned', 'Energy conversion focus', 'Water splitting'],
-        studentIds: ['3', '4'],
-    },
-    {
-        id: 3,
-        name: 'Basic Understanding',
-        count: 1,
-        avgScore: 65,
-        keyThemes: ['Surface-level explanation', 'Missing key details', 'Needs elaboration'],
-        studentIds: ['6'],
-    },
-];
+type SimilarGroup = {
+    id: number;
+    name: string;
+    count: number;
+    avgScore: number;
+    keyThemes: string[];
+    studentIds: string[];
+    students?: { id: number; name: string }[];
+};
 
 type StudentSubmission = {
     id: number;
@@ -78,6 +61,8 @@ export default function ActivityDetailPage() {
     const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
     const [loadingSubmissions, setLoadingSubmissions] = useState(false);
     const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+    const [similarGroups, setSimilarGroups] = useState<SimilarGroup[]>([]);
+    const [loadingSimilarGroups, setLoadingSimilarGroups] = useState(false);
 
     useEffect(() => {
         if (!classroomId || !activityCode) {
@@ -168,6 +153,45 @@ export default function ActivityDetailPage() {
         };
 
         fetchSubmissions();
+    }, [activityCode, classroomId]);
+
+    // Fetch similar response groups
+    useEffect(() => {
+        if (!classroomId || !activityCode) {
+            setSimilarGroups([]);
+            return;
+        }
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            return;
+        }
+
+        const fetchSimilarGroups = async () => {
+            setLoadingSimilarGroups(true);
+            try {
+                const response = await fetch(
+                    `/api/classrooms/${classroomId}/activities/${activityCode}/similar-groups/`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    },
+                );
+                if (!response.ok) {
+                    throw new Error('Failed to load similar groups');
+                }
+                const data = await response.json();
+                setSimilarGroups(data.groups || []);
+            } catch (error) {
+                console.error('Failed to load similar groups', error);
+                setSimilarGroups([]);
+            } finally {
+                setLoadingSimilarGroups(false);
+            }
+        };
+
+        fetchSimilarGroups();
     }, [activityCode, classroomId]);
 
     const submissionList = submissions;
@@ -447,7 +471,16 @@ export default function ActivityDetailPage() {
                     <div className="p-6">
                         <h2 className="text-xl mb-4">Similar Response Groups</h2>
                         <div className="space-y-3">
-                            {similarGroups.map((group) => (
+                            {loadingSimilarGroups && (
+                                <div className="flex items-center gap-2 text-gray-500">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span>Analyzing student responses...</span>
+                                </div>
+                            )}
+                            {!loadingSimilarGroups && similarGroups.length === 0 && (
+                                <p className="text-gray-500">No groups available yet. Groups will appear once students submit their work.</p>
+                            )}
+                            {!loadingSimilarGroups && similarGroups.map((group) => (
                                 <Card key={group.id} className="p-4 bg-gradient-to-r from-cyan-50 to-teal-50">
                                     <div className="flex items-start justify-between">
                                         <div className="flex-1">

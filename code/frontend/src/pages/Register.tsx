@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { GraduationCap, Sparkles } from "lucide-react";
+import { GraduationCap, Sparkles, User } from "lucide-react";
 
 export default function Register() {
     const [username, setU] = useState("");
@@ -18,7 +18,7 @@ export default function Register() {
     const location = useLocation();
 
     const roleFromState = (location.state as { role?: string })?.role;
-    const [role] = useState(roleFromState || "student");
+    const [role, setRole] = useState(roleFromState || "student");
 
     useEffect(() => {
     }, [role]);
@@ -103,18 +103,6 @@ export default function Register() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-blue-50 flex items-center justify-center px-6 py-12">
             <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,640px)_1fr] gap-8 items-center">
-                <div className="hidden lg:block lg:col-start-1">
-                    <div className="flex items-center gap-3 mb-8">
-                        <div className="w-12 h-12 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-xl flex items-center justify-center">
-                            <GraduationCap className="w-7 h-7 text-white" />
-                        </div>
-                        <span className="text-2xl">ScienceHub</span>
-                    </div>
-                    <h1 className="text-4xl mb-4">Join the Future of Science Education</h1>
-                    <p className="text-xl text-gray-600 mb-8">
-                        Create your account and start transforming your classroom with AI-powered learning.
-                    </p>
-                </div>
 
                 <section className="w-full max-w-lg mx-auto lg:col-start-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
                     <div className="bg-gradient-to-br from-teal-600 to-cyan-600 text-white px-8 py-8 relative overflow-hidden">
@@ -131,6 +119,32 @@ export default function Register() {
                     </div>
 
                     <form onSubmit={submit} className="px-8 py-8 space-y-5">
+                        {/* Role Selection */}
+                        <div className="grid grid-cols-2 gap-4 mb-2">
+                            <button
+                                type="button"
+                                onClick={() => setRole("student")}
+                                className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${role === "student"
+                                    ? "border-teal-500 bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-500/20"
+                                    : "border-gray-100 bg-gray-50 text-gray-400 hover:border-gray-200"
+                                    }`}
+                            >
+                                <User className={`w-6 h-6 mb-1.5 ${role === "student" ? "text-teal-600" : "text-gray-400"}`} />
+                                <span className="text-sm font-medium">Student</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRole("teacher")}
+                                className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${role === "teacher"
+                                    ? "border-teal-500 bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-500/20"
+                                    : "border-gray-100 bg-gray-50 text-gray-400 hover:border-gray-200"
+                                    }`}
+                            >
+                                <GraduationCap className={`w-6 h-6 mb-1.5 ${role === "teacher" ? "text-teal-600" : "text-gray-400"}`} />
+                                <span className="text-sm font-medium">Teacher</span>
+                            </button>
+                        </div>
+
                         {/* hidden: role */}
                         <input type="hidden" name="role" value={role} />
 
