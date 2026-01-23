@@ -1,7 +1,8 @@
 from django.db import models
-from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User
 
-User = get_user_model()
+if not hasattr(User, "role"):
+    User.add_to_class("role", models.CharField(max_length=20, blank=True, null=True))
 
 
 class StudentProfile(models.Model):
@@ -10,8 +11,6 @@ class StudentProfile(models.Model):
     )
     school = models.CharField(max_length=255, blank=True)
     grade = models.CharField(max_length=50, blank=True)
-    # App-level role for the user (e.g., 'student', 'teacher').
-    role = models.CharField(max_length=20, blank=True)
 
     def __str__(self):
         return f"{self.user.username} profile"

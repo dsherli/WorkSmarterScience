@@ -5,7 +5,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from classrooms.models import ClassroomActivityAssignment
-from .models import ScienceActivity, ScienceActivitySubmission
+from .models import ScienceActivity, ScienceActivitySubmission, ActivityAnswer
+import logging
+import json
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_bool(value: str | None) -> bool | None:
@@ -82,7 +86,7 @@ def get_science_activity(request, activity_id):
             cursor.execute(
                 """
                 SELECT file_path, description, media_type
-                FROM science_activity_images
+                FROM public.science_activity_images
                 WHERE activity_id = %s
                 ORDER BY id ASC;
             """,
@@ -241,6 +245,7 @@ def submit_activity_attempt(request, activity_id):
             status=403,
         )
 
+    # Get or create the submission record (without activity_answers)
     submission, created = ScienceActivitySubmission.objects.get_or_create(
         activity=science_activity,
         student=user,
@@ -266,108 +271,168 @@ def submit_activity_attempt(request, activity_id):
             ]
         )
 
+    # Get question texts from the activity
+    questions = [
+        q.strip()
+        for q in [
+            science_activity.question_1,
+            science_activity.question_2,
+            science_activity.question_3,
+            science_activity.question_4,
+            science_activity.question_5,
+        ]
+        if q and q.strip()
+    ]
+
+    # Upsert each answer into the normalized activity_answers table
+    for idx_str, answer_text in answers.items():
+        idx = int(idx_str)
+        question_num = idx + 1  # Convert 0-based index to 1-based question number
+        question_text = questions[idx] if idx < len(questions) else f"Question {question_num}"
+
+        ActivityAnswer.objects.update_or_create(
+            submission=submission,
+            question_number=question_num,
+            defaults={
+                "question_text": question_text,
+                "student_answer": answer_text or "",
+            },
+        )
+
     classroom_assignment.status = "submitted"
     classroom_assignment.submitted_at = timezone.now()
     classroom_assignment.save(update_fields=["status", "submitted_at"])
-    # Auto-create an AssessmentSubmission and trigger AI grading
+
+    # Trigger AI grading asynchronously (best-effort, non-blocking)
+    ai_grading_result = None
     try:
-        from grading.models import AssessmentSubmission, ActivityRubricMap, Rubric
-        from grading.ai_service import get_ai_service
-
-        # Build question_text and answer_text strings from activity and answers
-        questions = [
-            q for q in [
-                science_activity.question_1,
-                science_activity.question_2,
-                science_activity.question_3,
-                science_activity.question_4,
-                science_activity.question_5,
-            ] if q and str(q).strip()
-        ]
-        question_text = "\n\n".join([
-            f"Question {i+1}: {q}" for i, q in enumerate(questions)
-        ])
-
-        # answers stored in JSON; normalize into string blocks
-        answer_blocks = []
-        if isinstance(answers, dict):
-            for i, q in enumerate(questions):
-                key_candidates = [
-                    f"q{i+1}", f"question_{i+1}", f"answer_{i+1}", f"Question {i+1}", str(i+1)
-                ]
-                ans = None
-                for k in key_candidates:
-                    if k in answers and answers[k]:
-                        ans = answers[k]
-                        break
-                if ans is None:
-                    # fallback by matching first answer-like value
-                    ans = answers.get(f"answer{i+1}") or ""
-                answer_blocks.append(f"Question {i+1}: {q}\nAnswer: {ans}")
-        else:
-            # if answers is already a string
-            answer_blocks.append(str(answers))
-        answer_text = "\n\n---\n\n".join(answer_blocks)
-
-        # Find rubric mapping for this activity code
-        rubric = None
-        try:
-            mapping = ActivityRubricMap.objects.select_related("rubric").filter(activity_code=science_activity.activity_id).first()
-            rubric = mapping.rubric if mapping else None
-        except Exception:
-            rubric = None
-
-        assess_submission = AssessmentSubmission.objects.create(
-            student=user,
-            activity_id=science_activity.id,
-            question_text=question_text,
-            answer_text=answer_text,
-            rubric=rubric,
-            status="submitted",
-        )
-
-        # Trigger AI grading (levels by question for now)
-        ai = get_ai_service()
-        if ai.is_configured():
-            # Build rubric summary context if available
-            context_lines = []
-            if rubric:
-                context_lines.append(f"Rubric: {rubric.title}")
-                if rubric.description:
-                    context_lines.append(rubric.description)
-                context_lines.append("Criteria:")
-                for c in rubric.criteria.all():
-                    context_lines.append(f"- {c.name}: {c.description}")
-            context = "\n".join(context_lines) if context_lines else ""
-
-            result = ai.grade_levels_by_question(
-                question_text=assess_submission.question_text,
-                answer_text=assess_submission.answer_text,
-                context=context,
-            )
-
-            assess_submission.feedback = result.get("overall_feedback", "")
-            assess_submission.status = "graded"
-            assess_submission.graded_at = timezone.now()
-            assess_submission.graded_by_ai = True
-            assess_submission.ai_model_used = result.get("model_used", "")
-            assess_submission.tokens_used = result.get("tokens_used")
-            assess_submission.save()
-
-            # Reflect graded status back to the activity submission
-            submission.status = "graded"
-            submission.feedback_overview = assess_submission.feedback
-            submission.score = None
-            submission.save(update_fields=["status", "feedback_overview", "score"])
+        ai_grading_result = _grade_submission_with_ai(submission, science_activity)
     except Exception as e:
-        # Non-fatal: return success for submission even if grading fails
-        pass
+        logger.warning(f"AI grading failed for submission {submission.id}: {e}")
+        # Continue - AI grading failure shouldn't block submission
 
-    return Response(
-        {
-            "detail": "Activity attempt submitted successfully.",
-            "submission_id": submission.id,
-            "attempt_number": submission.attempt_number,
-        },
-        status=201 if created else 200,
-    )
+    response_data = {
+        "detail": "Activity attempt submitted successfully.",
+        "submission_id": submission.id,
+        "attempt_number": submission.attempt_number,
+    }
+    
+    if ai_grading_result:
+        response_data["ai_grading"] = {
+            "status": "completed",
+            "overall_score": ai_grading_result.get("overall_score"),
+            "answers_graded": ai_grading_result.get("answers_graded", 0),
+        }
+    else:
+        response_data["ai_grading"] = {"status": "pending"}
+
+    return Response(response_data, status=201 if created else 200)
+
+
+def _grade_submission_with_ai(submission, activity):
+    """
+    Grade a submission using the AI service.
+    Updates the ActivityAnswer records with AI feedback.
+    Returns grading results dict or None if AI service unavailable.
+    """
+    try:
+        from grading.ai_service import get_ai_service
+    except ImportError:
+        logger.warning("Grading module not available")
+        return None
+    
+    ai_service = get_ai_service()
+    if not ai_service.is_configured():
+        logger.info("AI service not configured, skipping auto-grading")
+        return None
+    
+    # Get all answers for this submission
+    answers = ActivityAnswer.objects.filter(submission=submission).order_by("question_number")
+    if not answers.exists():
+        return None
+    
+    grading_results = []
+    total_score = 0
+    max_possible = 0
+    
+    for answer in answers:
+        if not answer.student_answer:
+            continue
+            
+        try:
+            result = ai_service.evaluate_student_work(
+                question=answer.question_text,
+                student_answer=answer.student_answer,
+                context=f"Activity: {activity.activity_title or activity.activity_id}",
+            )
+            
+            # Parse the evaluation result
+            try:
+                evaluation = json.loads(result["evaluation"])
+                question_score = evaluation.get("score", 0)
+                feedback = evaluation.get("feedback", result["evaluation"])
+                strengths = evaluation.get("strengths", [])
+                improvements = evaluation.get("improvements", [])
+                
+                # Build comprehensive feedback
+                feedback_parts = [feedback]
+                if strengths:
+                    feedback_parts.append(f"\n\nStrengths: {', '.join(strengths)}")
+                if improvements:
+                    feedback_parts.append(f"\n\nAreas to improve: {', '.join(improvements)}")
+                
+                full_feedback = "".join(feedback_parts)
+            except (json.JSONDecodeError, TypeError):
+                question_score = 0
+                full_feedback = result.get("evaluation", "AI evaluation completed.")
+            
+            # Update the answer with AI feedback
+            answer.ai_feedback = full_feedback
+            answer.score = question_score
+            answer.save(update_fields=["ai_feedback", "score", "updated_at"])
+            
+            grading_results.append({
+                "question_number": answer.question_number,
+                "score": question_score,
+                "feedback": full_feedback,
+            })
+            
+            total_score += question_score
+            max_possible += 100
+            
+        except Exception as e:
+            logger.error(f"Error grading answer {answer.id}: {e}")
+            grading_results.append({
+                "question_number": answer.question_number,
+                "error": str(e),
+            })
+    
+    # Update submission overall score and status
+    if max_possible > 0:
+        normalized_score = round((total_score / max_possible) * 100, 2)
+    else:
+        normalized_score = 0
+    
+    submission.score = normalized_score
+    submission.status = "graded"
+    submission.feedback_overview = f"AI grading completed. Score: {normalized_score}%"
+    submission.save(update_fields=["score", "status", "feedback_overview"])
+    
+    # Log the grading session
+    try:
+        from grading.models import GradingSession
+        GradingSession.objects.create(
+            user=submission.student,
+            activity_id=submission.activity.id,
+            prompt=f"Auto-grade submission #{submission.id}",
+            response=json.dumps(grading_results),
+            model_used=ai_service._model or "unknown",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log grading session: {e}")
+    
+    return {
+        "overall_score": normalized_score,
+        "answers_graded": len([r for r in grading_results if "error" not in r]),
+        "results": grading_results,
+    }

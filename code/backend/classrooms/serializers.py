@@ -249,6 +249,29 @@ class ClassroomActivityAssignmentSubmissionSerializer(serializers.ModelSerialize
         submission = submission_map.get(obj.student_id)
         if not submission:
             return None
+        
+        # Get answers from the normalized activity_answers table
+        answers = []
+        try:
+            from activities.models import ActivityAnswer
+            answer_objs = ActivityAnswer.objects.filter(
+                submission_id=submission.id
+            ).order_by("question_number")
+            answers = [
+                {
+                    "id": ans.id,
+                    "question_number": ans.question_number,
+                    "question_text": ans.question_text,
+                    "student_answer": ans.student_answer,
+                    "ai_feedback": ans.ai_feedback,
+                    "teacher_feedback": ans.teacher_feedback,
+                    "score": float(ans.score) if ans.score else None,
+                }
+                for ans in answer_objs
+            ]
+        except Exception:
+            pass
+        
         return {
             "id": submission.id,
             "status": submission.status,
@@ -256,7 +279,7 @@ class ClassroomActivityAssignmentSubmissionSerializer(serializers.ModelSerialize
             "score": submission.score,
             "feedback_overview": submission.feedback_overview,
             "attempt_number": submission.attempt_number,
-            "activity_answers": submission.activity_answers,
+            "answers": answers,
         }
 
 

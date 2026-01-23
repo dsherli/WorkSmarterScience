@@ -1,22 +1,35 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from . import views
+"""
+Grading App URL Configuration
+"""
 
-# Router for ViewSets
-router = DefaultRouter()
-router.register(r'rubrics', views.RubricViewSet, basename='rubric')
-router.register(r'submissions', views.AssessmentSubmissionViewSet, basename='submission')
+from django.urls import path
+from .views import (
+    health_check,
+    evaluate_work,
+    chat_completion,
+    generate_feedback,
+    grade_submission,
+    update_teacher_feedback,
+    RubricListCreateView,
+    RubricDetailView,
+    GradingSessionListView,
+)
 
 urlpatterns = [
-    # Function-based views
-    path("health/", views.health_check, name="grading-health"),
-    path("evaluate/", views.evaluate_work, name="evaluate-work"),
-    path("chat/", views.chat_completion, name="chat-completion"),
-    path("feedback/", views.generate_feedback, name="generate-feedback"),
-    path("rubrics/import/", views.import_rubric_upload, name="import-rubric-upload"),
-    path("rubrics/mappings/", views.rubric_mappings, name="rubric-mappings"),
-    path("rubrics/mappings/set/", views.set_rubric_mapping, name="set-rubric-mapping"),
+    # AI Service endpoints
+    path("health/", health_check, name="grading-health"),
+    path("evaluate/", evaluate_work, name="grading-evaluate"),
+    path("chat/", chat_completion, name="grading-chat"),
+    path("feedback/", generate_feedback, name="grading-feedback"),
     
-    # ViewSet routes (rubrics, submissions)
-    path("", include(router.urls)),
+    # Submission grading
+    path("grade-submission/", grade_submission, name="grade-submission"),
+    path("teacher-feedback/", update_teacher_feedback, name="teacher-feedback"),
+    
+    # Rubric management
+    path("rubrics/", RubricListCreateView.as_view(), name="rubric-list-create"),
+    path("rubrics/<int:pk>/", RubricDetailView.as_view(), name="rubric-detail"),
+    
+    # Audit/Analytics
+    path("sessions/", GradingSessionListView.as_view(), name="grading-sessions"),
 ]

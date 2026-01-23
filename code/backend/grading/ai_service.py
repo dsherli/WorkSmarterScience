@@ -1,464 +1,336 @@
 """
-OpenAI/Azure OpenAI service layer
-Provides unified interface for both OpenAI and Azure OpenAI APIs
+AI Grading Service
+Provides OpenAI/Azure OpenAI integration for automated grading and feedback.
 """
 
-import os
 import json
-from typing import Optional, Dict, Any, List
+import os
+import logging
+from typing import Optional
 from django.conf import settings
 
+logger = logging.getLogger(__name__)
+
+# Try to import openai, handle if not installed
 try:
-    from openai import OpenAI, AzureOpenAI
-except ModuleNotFoundError:
-    OpenAI = None
-    AzureOpenAI = None
+    from openai import AzureOpenAI, OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    logger.warning("OpenAI package not installed. AI grading will be unavailable.")
 
 
 class AIService:
     """
-    Unified AI service supporting both OpenAI and Azure OpenAI.
-    Automatically detects which service to use based on environment variables.
+    Service for interacting with OpenAI or Azure OpenAI for grading.
+    Implements singleton pattern via get_ai_service().
     """
-    
+
     def __init__(self):
-        self.client = None
-        self.model = "gpt-4"
-        self._initialize_client()
-    
-    def _initialize_client(self):
-        """Initialize OpenAI or Azure OpenAI client based on available credentials"""
-        if AzureOpenAI is None and OpenAI is None:
-            print("[AIService] WARNING: openai package not installed. AI features disabled.")
+        self._client = None
+        self._model = None
+        self._service_type = None
+        self._initialize()
+
+    def _initialize(self):
+        """Initialize the OpenAI client based on environment configuration."""
+        if not OPENAI_AVAILABLE:
+            logger.warning("OpenAI package not available")
             return
-        
-        # Try Azure OpenAI first (since you have it in .env.example)
-        azure_endpoint = getattr(settings, "AZURE_OPENAI_ENDPOINT", None)
-        azure_key = getattr(settings, "AZURE_OPENAI_API_KEY", None)
-        
-        if azure_endpoint and azure_key and AzureOpenAI:
-            self.client = AzureOpenAI(
-                api_key=azure_key,
-                api_version=getattr(settings, "AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-                azure_endpoint=azure_endpoint
-            )
-            self.model = getattr(settings, "AZURE_OPENAI_DEPLOYMENT", "gpt-4")
-            print(f"[AIService] Using Azure OpenAI with deployment: {self.model}")
-            return
-        
+
+        # Check for Azure OpenAI first (takes precedence)
+        azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+        azure_key = os.environ.get("AZURE_OPENAI_API_KEY")
+        azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4")
+        azure_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+
+        if azure_endpoint and azure_key:
+            try:
+                self._client = AzureOpenAI(
+                    azure_endpoint=azure_endpoint,
+                    api_key=azure_key,
+                    api_version=azure_version,
+                    http_client=None,  # Avoid proxy issues
+                )
+                self._model = azure_deployment
+                self._service_type = "Azure OpenAI"
+                logger.info(f"AI Service initialized with Azure OpenAI (deployment: {azure_deployment})")
+                return
+            except TypeError as te:
+                # Fallback for older versions that don't support http_client
+                logger.warning(f"Retrying Azure OpenAI init without http_client: {te}")
+                try:
+                    self._client = AzureOpenAI(
+                        azure_endpoint=azure_endpoint,
+                        api_key=azure_key,
+                        api_version=azure_version,
+                    )
+                    self._model = azure_deployment
+                    self._service_type = "Azure OpenAI"
+                    logger.info(f"AI Service initialized with Azure OpenAI (deployment: {azure_deployment})")
+                    return
+                except Exception as e2:
+                    logger.error(f"Failed to initialize Azure OpenAI: {e2}")
+            except Exception as e:
+                logger.error(f"Failed to initialize Azure OpenAI: {e}")
+
         # Fall back to standard OpenAI
-        openai_key = getattr(settings, "OPENAI_API_KEY", None)
-        if openai_key and OpenAI:
-            self.client = OpenAI(api_key=openai_key)
-            self.model = getattr(settings, "OPENAI_MODEL", "gpt-4")
-            print(f"[AIService] Using OpenAI with model: {self.model}")
-            return
-        
-        print("[AIService] WARNING: No OpenAI or Azure OpenAI credentials found!")
-    
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                self._client = OpenAI(api_key=openai_key)
+                self._model = os.environ.get("OPENAI_MODEL", "gpt-4")
+                self._service_type = "OpenAI"
+                logger.info(f"AI Service initialized with OpenAI (model: {self._model})")
+                return
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI: {e}")
+
+        logger.warning("No AI service configured. Set AZURE_OPENAI_* or OPENAI_API_KEY.")
+
     def is_configured(self) -> bool:
-        """Check if AI service is properly configured"""
-        return self.client is not None
-    
+        """Check if the AI service is properly configured."""
+        return self._client is not None
+
+    def get_config_info(self) -> dict:
+        """Return configuration information for health checks."""
+        return {
+            "configured": self.is_configured(),
+            "model": self._model,
+            "service": self._service_type,
+        }
+
     def chat_completion(
         self,
-        messages: List[Dict[str, str]],
-        temperature: float = 0.7,
+        messages: list[dict],
+        temperature: float = 0.3,
         max_tokens: Optional[int] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict:
         """
-        Send a chat completion request to OpenAI/Azure OpenAI
-        
+        Send a chat completion request to the AI model.
+
         Args:
             messages: List of message dicts with 'role' and 'content'
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            **kwargs: Additional OpenAI API parameters
-        
+            temperature: Sampling temperature (0-1)
+            max_tokens: Maximum tokens in response
+
         Returns:
-            Dict with 'content', 'model', 'tokens_used', and 'finish_reason'
-        
-        Raises:
-            ValueError: If service not configured
-            Exception: API errors
+            dict with 'content', 'model', 'tokens_used', 'finish_reason'
         """
         if not self.is_configured():
-            raise ValueError("AI service not configured. Set OPENAI_API_KEY or Azure credentials.")
-        
-        # Always log the outbound prompt/payload to server stdout for troubleshooting
-        # Note: This intentionally avoids logging any API keys; only prompt content and params are printed.
-        try:
-            payload = {
-                "model": self.model,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "messages": messages,
-            }
-            if kwargs:
-                payload["extra_params"] = kwargs
-            print("[AIService] Sending chat completion request:")
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        except Exception as log_e:
-            # Fallback if something isn't JSON-serializable
-            print(f"[AIService] Failed to serialize prompt for logging: {log_e}")
-            try:
-                print({
-                    "model": self.model,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "messages_count": len(messages) if messages is not None else 0,
-                    "extra_params_keys": list(kwargs.keys()) if kwargs else [],
-                })
-            except Exception:
-                pass
+            raise RuntimeError("AI service not configured")
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
-            )
-            
-            return {
-                "content": response.choices[0].message.content,
-                "model": response.model,
-                "tokens_used": response.usage.total_tokens if response.usage else None,
-                "finish_reason": response.choices[0].finish_reason,
-                "raw_response": response
-            }
-        
-        except Exception as e:
-            print(f"[AIService] Error in chat_completion: {e}")
-            raise
-    
+        kwargs = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+
+        response = self._client.chat.completions.create(**kwargs)
+        choice = response.choices[0]
+
+        return {
+            "content": choice.message.content,
+            "model": self._model,
+            "tokens_used": response.usage.total_tokens if response.usage else None,
+            "finish_reason": choice.finish_reason,
+        }
+
     def evaluate_student_work(
         self,
         question: str,
         student_answer: str,
         rubric: Optional[str] = None,
-        context: Optional[str] = None
-    ) -> Dict[str, Any]:
+        context: Optional[str] = None,
+    ) -> dict:
         """
-        Evaluate student work using AI grading
-        
+        Evaluate a student's answer using AI.
+
         Args:
-            question: The question or prompt
-            student_answer: Student's submitted answer
-            rubric: Optional grading rubric
-            context: Optional additional context (course materials, etc.)
-        
+            question: The question the student answered
+            student_answer: The student's response
+            rubric: Optional grading criteria
+            context: Optional additional context
+
         Returns:
-            Dict with evaluation results including score, feedback, and reasoning
+            dict with 'evaluation' (JSON string), 'model', 'tokens_used'
         """
-        
-        system_prompt = """You are an educational assessment reviewer. 
-        Provide constructive, specific feedback that helps students learn and improve.
-        Encourage critical thinking, and self-reflection."""
-        
-        user_message = f"""Grade the following student work:
+        system_prompt = """You are an expert educational assessor for K-12 science education.
+Your task is to evaluate student work fairly and provide constructive feedback.
+Always respond with a valid JSON object containing:
+{
+  "score": <number 0-100>,
+  "strengths": ["list of things done well"],
+  "improvements": ["list of areas to improve"],
+  "feedback": "constructive feedback paragraph for the student"
+}"""
 
-QUESTION:
-{question}
-
-STUDENT ANSWER:
-{student_answer}"""
+        user_message = f"Question: {question}\n\nStudent Answer: {student_answer}"
         
         if rubric:
-            user_message += f"\n\nGRADING RUBRIC:\n{rubric}"
-        
+            user_message += f"\n\nGrading Criteria/Rubric:\n{rubric}"
         if context:
-            user_message += f"\n\nADDITIONAL CONTEXT:\n{context}"
-        
-        user_message += """
+            user_message += f"\n\nAdditional Context:\n{context}"
 
-Please provide:
-1. If the student was 
-2. Specific strengths in the answer
-3. Areas for improvement
-4. Constructive feedback for the student
+        result = self.chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.3,
+        )
 
-Format your response as JSON with keys: score, strengths, improvements, feedback"""
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-        
-        return self.chat_completion(messages, temperature=0.3)
-    
+        return {
+            "evaluation": result["content"],
+            "model": result["model"],
+            "tokens_used": result["tokens_used"],
+        }
+
+    def grade_with_rubric(
+        self,
+        question_text: str,
+        student_answer: str,
+        rubric_criteria: list[dict],
+        max_score: int = 100,
+    ) -> dict:
+        """
+        Grade a student answer using a structured rubric.
+
+        Args:
+            question_text: The question
+            student_answer: Student's response
+            rubric_criteria: List of criteria dicts with title, levels, weight
+            max_score: Maximum possible score
+
+        Returns:
+            dict with score, criteria_scores, overall_feedback, model, tokens_used
+        """
+        criteria_text = ""
+        for i, criterion in enumerate(rubric_criteria, 1):
+            criteria_text += f"\nCriterion {i}: {criterion.get('title', 'Unnamed')}\n"
+            criteria_text += f"Weight: {criterion.get('weight', 1.0)}\n"
+            levels = criterion.get("levels", [])
+            for level in levels:
+                criteria_text += f"  - {level.get('name', 'Level')}: {level.get('description', '')}\n"
+
+        system_prompt = f"""You are an expert K-12 science educator grading student work.
+Use the provided rubric to evaluate the student's response.
+Maximum score: {max_score}
+
+Respond with a valid JSON object:
+{{
+  "total_score": <number>,
+  "criteria_scores": [
+    {{
+      "criterion_index": <0-based index>,
+      "criterion_title": "<title>",
+      "level_achieved": "<Proficient/Developing/Beginning>",
+      "points": <number>,
+      "feedback": "<specific feedback for this criterion>"
+    }}
+  ],
+  "overall_feedback": "<comprehensive feedback for the student>",
+  "strengths": ["list of strengths"],
+  "improvements": ["areas for improvement"]
+}}"""
+
+        user_message = f"""Question: {question_text}
+
+Student Answer: {student_answer}
+
+Rubric Criteria:
+{criteria_text}"""
+
+        result = self.chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.3,
+        )
+
+        try:
+            parsed = json.loads(result["content"])
+        except json.JSONDecodeError:
+            # Try to extract JSON from response
+            content = result["content"]
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start >= 0 and end > start:
+                try:
+                    parsed = json.loads(content[start:end])
+                except json.JSONDecodeError:
+                    parsed = {
+                        "total_score": 0,
+                        "criteria_scores": [],
+                        "overall_feedback": content,
+                        "strengths": [],
+                        "improvements": ["Unable to parse structured response"],
+                    }
+            else:
+                parsed = {
+                    "total_score": 0,
+                    "criteria_scores": [],
+                    "overall_feedback": content,
+                    "strengths": [],
+                    "improvements": ["Unable to parse structured response"],
+                }
+
+        return {
+            **parsed,
+            "model": result["model"],
+            "tokens_used": result["tokens_used"],
+        }
+
     def generate_feedback(
         self,
         prompt: str,
         context: Optional[str] = None,
-        temperature: float = 0.7
-    ) -> Dict[str, Any]:
+        temperature: float = 0.7,
+    ) -> dict:
         """
-        Generate general educational feedback or assistance
-        
+        Generate educational feedback or explanation.
+
         Args:
-            prompt: User's question or request
-            context: Optional context (student work, course materials, etc.)
-            temperature: Creativity level (0-2)
-        
+            prompt: The question or topic
+            context: Additional context
+            temperature: Creativity level
+
         Returns:
-            AI-generated response
+            dict with 'feedback', 'model', 'tokens_used'
         """
-        system_prompt = """You are a helpful educational assistant for the Work Smarter Science platform.
-Help students understand concepts, provide hints without giving away answers, 
-and encourage critical thinking."""
-        
+        system_prompt = """You are a helpful K-12 science educator.
+Provide clear, age-appropriate explanations and feedback.
+Be encouraging while maintaining accuracy."""
+
         user_message = prompt
         if context:
-            user_message = f"Context: {context}\n\n{prompt}"
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-        
-        return self.chat_completion(messages, temperature=temperature)
-    
-    def grade_with_rubric(
-        self,
-        question: str,
-        student_answer: str,
-        rubric_data: Dict[str, Any],
-        context: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Grade student work using a structured rubric with multiple criteria
-        
-        Args:
-            question: The question or prompt
-            student_answer: Student's submitted answer
-            rubric_data: Dict with 'title', 'total_points', and 'criteria' list
-                Each criterion has: name, description, max_points, weight
-            context: Optional additional context
-        
-        Returns:
-            Dict with overall score, criterion scores, and feedback
-            {
-                "total_score": float,
-                "max_score": float,
-                "percentage": float,
-                "overall_feedback": str,
-                "criterion_results": [
-                    {
-                        "criterion_name": str,
-                        "points_earned": float,
-                        "max_points": float,
-                        "feedback": str
-                    },
-                    ...
-                ]
-            }
-        """
-        
-        # Build detailed rubric description
-        rubric_text = f"Rubric: {rubric_data.get('title', 'Grading Rubric')}\n"
-        rubric_text += f"Total Points: {rubric_data.get('total_points', 100)}\n\n"
-        rubric_text += "Criteria:\n"
-        
-        for i, criterion in enumerate(rubric_data.get('criteria', []), 1):
-            rubric_text += f"{i}. {criterion['name']} ({criterion['max_points']} points)\n"
-            rubric_text += f"   Description: {criterion['description']}\n"
-            rubric_text += f"   Weight: {criterion.get('weight', 1.0)}\n"
-        
-        system_prompt = """You are an expert educational grader. Evaluate student work against specific rubric criteria.
-Be fair, consistent, and provide constructive feedback that helps students improve.
-Grade each criterion separately and provide specific feedback for each."""
-        
-        user_message = f"""Grade the following student work according to the rubric:
+            user_message = f"{context}\n\n{prompt}"
 
-QUESTION:
-{question}
-
-STUDENT ANSWER:
-{student_answer}
-
-{rubric_text}"""
-        
-        if context:
-            user_message += f"\n\nADDITIONAL CONTEXT:\n{context}"
-        
-        user_message += """
-
-Please evaluate the work against EACH criterion in the rubric and respond with valid JSON:
-
-{
-  "overall_feedback": "General feedback about the submission",
-  "criterion_results": [
-    {
-      "criterion_name": "Name of criterion",
-      "points_earned": <number between 0 and max_points>,
-      "max_points": <max points for this criterion>,
-      "feedback": "Specific feedback for this criterion explaining the score"
-    }
-  ]
-}
-
-Be specific about why points were awarded or deducted for each criterion.
-Provide actionable feedback to help the student improve."""
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-        
-        try:
-            response = self.chat_completion(messages, temperature=0.3, max_tokens=2000)
-            
-            # Parse JSON response
-            content = response["content"].strip()
-            
-            # Try to extract JSON if wrapped in markdown code blocks
-            if content.startswith("```"):
-                # Remove code block markers
-                content = content.split("```")[1]
-                if content.startswith("json"):
-                    content = content[4:].strip()
-            
-            result_data = json.loads(content)
-            
-            # Calculate total score
-            total_score = sum(cr["points_earned"] for cr in result_data["criterion_results"])
-            max_score = sum(cr["max_points"] for cr in result_data["criterion_results"])
-            
-            return {
-                "total_score": total_score,
-                "max_score": max_score,
-                "percentage": (total_score / max_score * 100) if max_score > 0 else 0,
-                "overall_feedback": result_data["overall_feedback"],
-                "criterion_results": result_data["criterion_results"],
-                "model_used": response["model"],
-                "tokens_used": response.get("tokens_used")
-            }
-        
-        except json.JSONDecodeError as e:
-            # Fallback if JSON parsing fails
-            print(f"[AIService] JSON parsing failed: {e}")
-            print(f"[AIService] Raw content: {content}")
-            
-            # Return a fallback structure
-            return {
-                "total_score": 0,
-                "max_score": rubric_data.get("total_points", 100),
-                "percentage": 0,
-                "overall_feedback": f"Error parsing AI response. Raw response: {content}",
-                "criterion_results": [],
-                "model_used": response["model"],
-                "tokens_used": response.get("tokens_used"),
-                "error": str(e)
-            }
-
-    def grade_levels_by_question(
-        self,
-        question_text: str,
-        answer_text: str,
-        context: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Classify EACH question/answer pair as Beginning, Developing, or Proficient.
-
-        Inputs are expected to contain multiple questions and answers. The answer_text
-        may include blocks such as:
-            "Question 1: <question>\n\nAnswer: <answer>\n\n---\n\nQuestion 2: ..."
-
-        Returns:
-            {
-              "overall_feedback": str,
-              "questions": [
-                {"index": 1, "question": str, "level": "Beginning|Developing|Proficient", "explanation": str},
-                ...
-              ]
-            }
-        """
-
-        system_prompt = (
-            "You are a middle school teacher and reviewer. For each question/answer pair, classify the student's "
-            "performance into one of three levels: Beginning, Developing, or Proficient. "
-            "Give specific and detailed feedback in explanations to what went well with their response and what went wrong."
-            "If the student is wrong, explain why and what they can do to improve."
+        result = self.chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=temperature,
         )
 
-        user_message = (
-            "You will receive multiple questions and the student's answers. "
-            "Extract each question/answer pair and evaluate it individually.\n\n"
-            f"QUESTIONS TEXT:\n{question_text}\n\n"
-            f"ANSWERS TEXT:\n{answer_text}\n\n"
-            "Return STRICT JSON with this exact schema (no code fences):\n"
-            "{\n"
-            "  \"overall_feedback\": string,\n"
-            "  \"questions\": [\n"
-            "    {\n"
-            "      \"index\": number,\n"
-            "      \"question\": string,\n"
-            "      \"level\": \"Beginning\" | \"Developing\" | \"Proficient\",\n"
-            "      \"explanation\": string\n"
-            "    }\n"
-            "  ]\n"
-            "}"
-        )
-
-        if context:
-            user_message += f"\n\nADDITIONAL CONTEXT:\n{context}"
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
-
-        try:
-            response = self.chat_completion(messages, temperature=0.2, max_tokens=1200)
-            content = response["content"].strip()
-
-            # Remove code fences if any
-            if content.startswith("```"):
-                parts = content.split("```")
-                if len(parts) >= 2:
-                    content = parts[1]
-                    if content.startswith("json"):
-                        content = content[4:].strip()
-
-            data = json.loads(content)
-            # Normalize levels capitalization
-            for q in data.get("questions", []):
-                lvl = str(q.get("level", "")).strip().lower()
-                if lvl.startswith("prof"):
-                    q["level"] = "Proficient"
-                elif lvl.startswith("dev"):
-                    q["level"] = "Developing"
-                else:
-                    q["level"] = "Beginning"
-
-            return {
-                "overall_feedback": data.get("overall_feedback", ""),
-                "questions": data.get("questions", []),
-                "model_used": response.get("model"),
-                "tokens_used": response.get("tokens_used"),
-            }
-
-        except json.JSONDecodeError as e:
-            print(f"[AIService] JSON parsing failed (levels_by_question): {e}")
-            print(f"[AIService] Raw content: {content}")
-            return {
-                "overall_feedback": "",
-                "questions": [],
-                "model_used": response.get("model") if 'response' in locals() else self.model,
-                "tokens_used": response.get("tokens_used") if 'response' in locals() else None,
-                "error": str(e),
-            }
+        return {
+            "feedback": result["content"],
+            "model": result["model"],
+            "tokens_used": result["tokens_used"],
+        }
 
 
 # Singleton instance
-_ai_service = None
+_ai_service_instance: Optional[AIService] = None
+
 
 def get_ai_service() -> AIService:
-    """Get or create AIService singleton"""
-    global _ai_service
-    if _ai_service is None:
-        _ai_service = AIService()
-    return _ai_service
+    """Get or create the singleton AIService instance."""
+    global _ai_service_instance
+    if _ai_service_instance is None:
+        _ai_service_instance = AIService()
+    return _ai_service_instance

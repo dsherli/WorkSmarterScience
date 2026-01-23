@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -7,9 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet';
-import { Progress } from '../components/ui/progress';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Calendar, Users, MessageSquare, Send, Bot, User as UserIcon, Edit3 } from 'lucide-react';
-import type { ScienceActivitySubmission } from './types';
+import { ArrowLeft, CheckCircle2, Clock, Calendar, Users, MessageSquare, Send, Bot, User as UserIcon, Edit3, RefreshCw, Loader2 } from 'lucide-react';
+import { gradeSubmission } from '../services/aiService';
+import type { ScienceActivitySubmission, ActivityAnswer } from './types';
 
 const similarGroups = [
     {
@@ -51,6 +51,7 @@ type StudentSubmission = {
     teacherFeedback: string | null;
     answer: string;
     submission: ScienceActivitySubmission | null;
+    answers: ActivityAnswer[];
     similarGroup?: number | null;
 };
 
@@ -66,6 +67,8 @@ export default function ActivityDetailPage() {
     const [editMode, setEditMode] = useState(false);
     const [teacherScore, setTeacherScore] = useState('');
     const [teacherFeedback, setTeacherFeedback] = useState('');
+    const [isRegrading, setIsRegrading] = useState(false);
+    const [regradeError, setRegradeError] = useState<string | null>(null);
     const [activityDetails, setActivityDetails] = useState({
         classroomName: '',
         title: '',
@@ -112,17 +115,25 @@ export default function ActivityDetailPage() {
                     const fullName = `${student.first_name || ''} ${student.last_name || ''}`.trim()
                         || student.username
                         || 'Student';
-                    const answers = submission?.activity_answers;
+                    
+                    // Get answers from the normalized answers array
+                    const answers: ActivityAnswer[] = submission?.answers || [];
+                    
+                    // Format answers for display
                     let formattedAnswer = '';
-                    if (answers) {
-                        if (typeof answers === 'string') {
-                            formattedAnswer = answers;
-                        } else if (Array.isArray(answers)) {
-                            formattedAnswer = answers.join('\n\n');
-                        } else {
-                            formattedAnswer = JSON.stringify(answers, null, 2);
-                        }
+                    if (answers.length > 0) {
+                        formattedAnswer = answers
+                            .sort((a, b) => a.question_number - b.question_number)
+                            .map((ans) => `Q${ans.question_number}: ${ans.student_answer || '(no answer)'}`)
+                            .join('\n\n');
                     }
+                    
+                    // Combine AI feedback from all answers
+                    const aiFeedbackSummary = answers
+                        .filter(a => a.ai_feedback)
+                        .map(a => `Q${a.question_number}: ${a.ai_feedback}`)
+                        .join('\n\n') || 'No AI feedback available yet.';
+                    
                     return {
                         id: item.id,
                         studentId: student.id,
@@ -132,10 +143,11 @@ export default function ActivityDetailPage() {
                         submittedAt: submission?.submitted_at || item.submitted_at || null,
                         aiScore: submission?.score ?? 0,
                         teacherScore: item.score ?? submission?.score ?? null,
-                        aiFeedback: submission?.feedback_overview || 'No AI feedback available yet.',
+                        aiFeedback: aiFeedbackSummary,
                         teacherFeedback: submission?.feedback_overview || null,
                         answer: formattedAnswer || 'No answer submitted yet.',
                         submission,
+                        answers,
                         similarGroup: null,
                     };
                 });
@@ -172,8 +184,70 @@ export default function ActivityDetailPage() {
     const handleStudentClick = (student: StudentSubmission) => {
         setSelectedStudent(student);
         setEditMode(false);
+        setRegradeError(null);
         setTeacherScore(student.teacherScore?.toString() || student.aiScore.toString() || '0');
         setTeacherFeedback(student.teacherFeedback || student.aiFeedback || '');
+    };
+
+    const handleRegrade = async () => {
+        if (!selectedStudent?.submission?.id) return;
+        
+        setIsRegrading(true);
+        setRegradeError(null);
+        
+        try {
+            const result = await gradeSubmission({
+                submission_id: selectedStudent.submission.id,
+            });
+            
+            // Update the selected student with new grading results
+            setSelectedStudent(prev => {
+                if (!prev) return null;
+                
+                // Update answers with new AI feedback
+                const updatedAnswers = prev.answers.map(answer => {
+                    const gradedAnswer = result.results.find(
+                        r => r.question_number === answer.question_number
+                    );
+                    if (gradedAnswer && !gradedAnswer.error) {
+                        return {
+                            ...answer,
+                            ai_feedback: gradedAnswer.feedback,
+                            score: gradedAnswer.score,
+                        };
+                    }
+                    return answer;
+                });
+                
+                return {
+                    ...prev,
+                    aiScore: result.overall_score,
+                    status: 'graded',
+                    answers: updatedAnswers,
+                    aiFeedback: updatedAnswers
+                        .filter(a => a.ai_feedback)
+                        .map(a => `Q${a.question_number}: ${a.ai_feedback}`)
+                        .join('\n\n') || 'AI grading completed.',
+                };
+            });
+            
+            // Also update in the submissions list
+            setSubmissions(prev => prev.map(s => {
+                if (s.id === selectedStudent.id) {
+                    return {
+                        ...s,
+                        aiScore: result.overall_score,
+                        status: 'graded',
+                    };
+                }
+                return s;
+            }));
+            
+        } catch (error) {
+            setRegradeError(error instanceof Error ? error.message : 'Failed to regrade submission');
+        } finally {
+            setIsRegrading(false);
+        }
     };
 
     const handleSaveFeedback = () => {
@@ -352,7 +426,7 @@ export default function ActivityDetailPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    onClick={(e) => {
+                                                    onClick={(e: React.MouseEvent) => {
                                                         e.stopPropagation();
                                                         handleStudentClick(submission);
                                                     }}
@@ -423,31 +497,107 @@ export default function ActivityDetailPage() {
                             </SheetHeader>
 
                             <div className="mt-6 space-y-6">
-                                {/* Student Answer */}
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <UserIcon className="w-4 h-4 text-gray-600" />
-                                        <h3 className="text-sm text-gray-600">Student Answer</h3>
+                                {/* Overall Score Summary */}
+                                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-cyan-50 to-teal-50 rounded-lg">
+                                    <div className="flex-1">
+                                        <div className="text-sm text-gray-600">AI Score</div>
+                                        <div className="text-2xl font-semibold">{selectedStudent.aiScore}%</div>
                                     </div>
-                                    <Card className="p-4 bg-gray-50">
-                                        <p>{selectedStudent.answer}</p>
-                                    </Card>
-                                </div>
-
-                                {/* AI Feedback */}
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Bot className="w-4 h-4 text-purple-600" />
-                                        <h3 className="text-sm text-gray-600">AI Evaluation</h3>
-                                    </div>
-                                    <Card className="p-4 bg-gradient-to-r from-purple-50 to-pink-50">
-                                        <div className="mb-2">
-                                            <Badge variant="outline" className="bg-white">
-                                                AI Score: {selectedStudent.aiScore}%
-                                            </Badge>
+                                    {selectedStudent.teacherScore !== null && (
+                                        <div className="flex-1">
+                                            <div className="text-sm text-gray-600">Teacher Score</div>
+                                            <div className="text-2xl font-semibold">{selectedStudent.teacherScore}%</div>
                                         </div>
-                                        <p className="text-sm">{selectedStudent.aiFeedback}</p>
-                                    </Card>
+                                    )}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleRegrade}
+                                        disabled={isRegrading || !selectedStudent.submission}
+                                        className="flex items-center gap-2"
+                                    >
+                                        {isRegrading ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="w-4 h-4" />
+                                        )}
+                                        {isRegrading ? 'Grading...' : 'Re-grade with AI'}
+                                    </Button>
+                                </div>
+                                
+                                {regradeError && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                        {regradeError}
+                                    </div>
+                                )}
+
+                                {/* Per-Answer Feedback */}
+                                <div>
+                                    <h3 className="text-lg font-medium mb-3">Answer Breakdown</h3>
+                                    <div className="space-y-4">
+                                        {selectedStudent.answers.length > 0 ? (
+                                            selectedStudent.answers
+                                                .sort((a, b) => a.question_number - b.question_number)
+                                                .map((answer) => (
+                                                    <Card key={answer.id || answer.question_number} className="p-4">
+                                                        <div className="mb-3">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <h4 className="font-medium text-gray-700">
+                                                                    Question {answer.question_number}
+                                                                </h4>
+                                                                {answer.score !== null && (
+                                                                    <Badge variant="outline" className="bg-purple-50">
+                                                                        Score: {answer.score}%
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-sm text-gray-600 mb-2">{answer.question_text}</p>
+                                                        </div>
+                                                        
+                                                        {/* Student Answer */}
+                                                        <div className="mb-3">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <UserIcon className="w-3 h-3 text-gray-500" />
+                                                                <span className="text-xs text-gray-500">Student Answer</span>
+                                                            </div>
+                                                            <div className="p-3 bg-gray-50 rounded text-sm">
+                                                                {answer.student_answer || '(no answer)'}
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* AI Feedback */}
+                                                        {answer.ai_feedback && (
+                                                            <div className="mb-3">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <Bot className="w-3 h-3 text-purple-500" />
+                                                                    <span className="text-xs text-purple-600">AI Feedback</span>
+                                                                </div>
+                                                                <div className="p-3 bg-purple-50 rounded text-sm whitespace-pre-wrap">
+                                                                    {answer.ai_feedback}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {/* Teacher Feedback */}
+                                                        {answer.teacher_feedback && (
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <Edit3 className="w-3 h-3 text-teal-500" />
+                                                                    <span className="text-xs text-teal-600">Teacher Feedback</span>
+                                                                </div>
+                                                                <div className="p-3 bg-teal-50 rounded text-sm">
+                                                                    {answer.teacher_feedback}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </Card>
+                                                ))
+                                        ) : (
+                                            <Card className="p-4 bg-gray-50">
+                                                <p className="text-gray-500">No answers submitted yet.</p>
+                                            </Card>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Teacher Feedback Section */}
@@ -455,7 +605,7 @@ export default function ActivityDetailPage() {
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
                                             <Edit3 className="w-4 h-4 text-teal-600" />
-                                            <h3 className="text-sm text-gray-600">Teacher Evaluation</h3>
+                                            <h3 className="text-sm text-gray-600">Overall Teacher Feedback</h3>
                                         </div>
                                         {!editMode && (
                                             <Button
@@ -472,7 +622,7 @@ export default function ActivityDetailPage() {
                                         {editMode ? (
                                             <div className="space-y-4">
                                                 <div>
-                                                    <label className="text-sm text-gray-600 mb-2 block">Score (0-100)</label>
+                                                    <label className="text-sm text-gray-600 mb-2 block">Override Score (0-100)</label>
                                                     <Input
                                                         type="number"
                                                         min="0"
@@ -498,7 +648,7 @@ export default function ActivityDetailPage() {
                                                         onClick={handleSaveFeedback}
                                                     >
                                                         <Send className="w-4 h-4 mr-2" />
-                                                        Save & Send to Student
+                                                        Save Feedback
                                                     </Button>
                                                     <Button
                                                         variant="outline"
@@ -512,11 +662,11 @@ export default function ActivityDetailPage() {
                                             <div>
                                                 <div className="mb-2">
                                                     <Badge variant="outline" className="bg-white">
-                                                        Teacher Score: {selectedStudent.teacherScore || selectedStudent.aiScore}%
+                                                        Final Score: {selectedStudent.teacherScore || selectedStudent.aiScore}%
                                                     </Badge>
                                                 </div>
                                                 <p className="text-sm">
-                                                    {selectedStudent.teacherFeedback || selectedStudent.aiFeedback}
+                                                    {selectedStudent.teacherFeedback || 'No teacher feedback added yet. Click Edit to add feedback.'}
                                                 </p>
                                             </div>
                                         )}

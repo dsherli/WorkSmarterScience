@@ -1,79 +1,92 @@
-from rest_framework import status, viewsets
-from rest_framework.decorators import api_view, permission_classes, action, parser_classes
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
-from django.views.decorators.csrf import csrf_exempt
+"""
+Grading App Views
+API endpoints for AI-powered grading, feedback, and rubric management.
+"""
+
+import json
+import logging
 from django.utils import timezone
+from rest_framework import status, generics, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+
+from activities.models import ScienceActivitySubmission, ActivityAnswer
+from .models import GradingSession, Rubric, ActivityRubricMap
 from .ai_service import get_ai_service
 from .serializers import (
-    EvaluateWorkSerializer,
-    ChatCompletionSerializer,
-    FeedbackSerializer,
-    GradingSessionSerializer,
+    EvaluateWorkRequestSerializer,
+    ChatCompletionRequestSerializer,
+    FeedbackRequestSerializer,
+    GradeSubmissionRequestSerializer,
     RubricSerializer,
-    AssessmentSubmissionSerializer,
-    GradeSubmissionRequest,
-    CriterionScoreSerializer
+    GradingSessionSerializer,
 )
-from .models import GradingSession, Rubric, AssessmentSubmission, CriterionScore, ActivityRubricMap, RubricCriterion
-from activities.models import ScienceActivity
-from django.contrib.auth.decorators import user_passes_test
-from django.db import transaction
-import json
+
+logger = logging.getLogger(__name__)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health_check(request):
+    """
+    Check if AI service is configured and available.
+    Returns configuration status for frontend display.
+    """
+    ai_service = get_ai_service()
+    return Response(ai_service.get_config_info())
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def evaluate_work(request):
     """
-    Evaluate student work using AI
+    Evaluate student work using AI.
     
-    POST /api/grading/evaluate/
-    Body: {
+    Request body:
+    {
         "question": "What is photosynthesis?",
-        "student_answer": "Process where plants make food...",
-        "rubric": "Optional rubric text",
-        "context": "Optional context",
+        "student_answer": "Plants make food from sunlight...",
+        "rubric": "Optional grading criteria",
+        "context": "Optional additional context",
         "activity_id": 123
     }
     """
-    serializer = EvaluateWorkSerializer(data=request.data)
+    serializer = EvaluateWorkRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     ai_service = get_ai_service()
     if not ai_service.is_configured():
         return Response(
-            {"error": "AI service not configured. Contact administrator."},
+            {"error": "AI service not configured. Please set up API keys."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     
+    data = serializer.validated_data
+    
     try:
         result = ai_service.evaluate_student_work(
-            question=serializer.validated_data["question"],
-            student_answer=serializer.validated_data["student_answer"],
-            rubric=serializer.validated_data.get("rubric"),
-            context=serializer.validated_data.get("context")
+            question=data["question"],
+            student_answer=data["student_answer"],
+            rubric=data.get("rubric"),
+            context=data.get("context"),
         )
         
         # Log the grading session
         GradingSession.objects.create(
             user=request.user,
-            activity_id=serializer.validated_data.get("activity_id"),
-            prompt=f"Q: {serializer.validated_data['question']}\nA: {serializer.validated_data['student_answer']}",
-            response=result["content"],
+            activity_id=data.get("activity_id"),
+            prompt=f"Q: {data['question']}\nA: {data['student_answer']}",
+            response=result["evaluation"],
             model_used=result["model"],
-            tokens_used=result.get("tokens_used")
+            tokens_used=result.get("tokens_used"),
         )
         
-        return Response({
-            "evaluation": result["content"],
-            "model": result["model"],
-            "tokens_used": result.get("tokens_used")
-        })
-    
+        return Response(result)
+        
     except Exception as e:
+        logger.error(f"AI evaluation error: {e}")
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -84,54 +97,41 @@ def evaluate_work(request):
 @permission_classes([IsAuthenticated])
 def chat_completion(request):
     """
-    General purpose chat completion endpoint
+    Send a chat completion request to the AI model.
     
-    POST /api/grading/chat/
-    Body: {
+    Request body:
+    {
         "messages": [
             {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": "Hello!"}
+            {"role": "user", "content": "Explain the water cycle"}
         ],
         "temperature": 0.7,
         "max_tokens": 500
     }
     """
-    serializer = ChatCompletionSerializer(data=request.data)
+    serializer = ChatCompletionRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     ai_service = get_ai_service()
     if not ai_service.is_configured():
         return Response(
-            {"error": "AI service not configured. Contact administrator."},
+            {"error": "AI service not configured"},
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     
+    data = serializer.validated_data
+    
     try:
         result = ai_service.chat_completion(
-            messages=serializer.validated_data["messages"],
-            temperature=serializer.validated_data.get("temperature", 0.7),
-            max_tokens=serializer.validated_data.get("max_tokens")
+            messages=data["messages"],
+            temperature=data.get("temperature", 0.7),
+            max_tokens=data.get("max_tokens"),
         )
+        return Response(result)
         
-        # Log the session (simplified)
-        messages_str = str(serializer.validated_data["messages"])
-        GradingSession.objects.create(
-            user=request.user,
-            prompt=messages_str[:500],  # Truncate if too long
-            response=result["content"][:500],
-            model_used=result["model"],
-            tokens_used=result.get("tokens_used")
-        )
-        
-        return Response({
-            "content": result["content"],
-            "model": result["model"],
-            "tokens_used": result.get("tokens_used"),
-            "finish_reason": result.get("finish_reason")
-        })
-    
     except Exception as e:
+        logger.error(f"Chat completion error: {e}")
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -142,483 +142,289 @@ def chat_completion(request):
 @permission_classes([IsAuthenticated])
 def generate_feedback(request):
     """
-    Generate educational feedback or assistance
+    Generate educational feedback or explanation.
     
-    POST /api/grading/feedback/
-    Body: {
-        "prompt": "Can you explain the water cycle?",
-        "context": "Optional context about the student's current work",
+    Request body:
+    {
+        "prompt": "Can you explain cellular respiration?",
+        "context": "Optional context",
         "temperature": 0.7
     }
     """
-    serializer = FeedbackSerializer(data=request.data)
+    serializer = FeedbackRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     ai_service = get_ai_service()
     if not ai_service.is_configured():
         return Response(
-            {"error": "AI service not configured. Contact administrator."},
+            {"error": "AI service not configured"},
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
     
+    data = serializer.validated_data
+    
     try:
         result = ai_service.generate_feedback(
-            prompt=serializer.validated_data["prompt"],
-            context=serializer.validated_data.get("context"),
-            temperature=serializer.validated_data.get("temperature", 0.7)
+            prompt=data["prompt"],
+            context=data.get("context"),
+            temperature=data.get("temperature", 0.7),
         )
+        return Response(result)
         
-        # Log the session
-        GradingSession.objects.create(
-            user=request.user,
-            prompt=serializer.validated_data["prompt"],
-            response=result["content"],
-            model_used=result["model"],
-            tokens_used=result.get("tokens_used")
-        )
-        
-        return Response({
-            "feedback": result["content"],
-            "model": result["model"],
-            "tokens_used": result.get("tokens_used")
-        })
-    
     except Exception as e:
+        logger.error(f"Feedback generation error: {e}")
         return Response(
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
-@api_view(["GET"])
-def health_check(request):
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def grade_submission(request):
     """
-    Check if AI service is configured and ready
+    Grade a science activity submission using AI.
+    Grades each answer individually and stores feedback in activity_answers table.
     
-    GET /api/grading/health/
+    Request body:
+    {
+        "submission_id": 123,
+        "rubric_json": { optional rubric override }
+    }
     """
+    serializer = GradeSubmissionRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     ai_service = get_ai_service()
-    is_configured = ai_service.is_configured()
-    
-    service_type = "None"
-    if is_configured:
-        if hasattr(ai_service.client, "azure_endpoint"):
-            service_type = "Azure OpenAI"
-        else:
-            service_type = "OpenAI"
-    
-    return Response({
-        "configured": is_configured,
-        "model": ai_service.model if is_configured else None,
-        "service": service_type
-    })
-
-
-# --- Rubric import & mapping endpoints ---
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def rubric_mappings(request):
-    """List current activity->rubric mappings with rubric titles."""
-    mappings = ActivityRubricMap.objects.select_related("rubric").all()
-    data = [
-        {
-            "activity_code": m.activity_code,
-            "rubric_id": m.rubric.id,
-            "rubric_title": m.rubric.title,
-            "assignment_id": m.assignment_id,
-            "created_at": m.created_at,
-        }
-        for m in mappings
-    ]
-    return Response(data)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def set_rubric_mapping(request):
-    """Set or update a mapping between an activity_code and a rubric_id."""
-    if not request.user.is_staff:
-        return Response({"error": "Only staff can set mappings"}, status=status.HTTP_403_FORBIDDEN)
-
-    activity_code = request.data.get("activity_code")
-    rubric_id = request.data.get("rubric_id")
-    assignment_id = request.data.get("assignment_id", "")
-    if not activity_code or not rubric_id:
-        return Response({"error": "activity_code and rubric_id are required"}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        rubric = Rubric.objects.get(id=rubric_id)
-    except Rubric.DoesNotExist:
-        return Response({"error": "Rubric not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    mapping, _ = ActivityRubricMap.objects.update_or_create(
-        activity_code=activity_code,
-        defaults={"rubric": rubric, "assignment_id": assignment_id},
-    )
-    return Response({
-        "activity_code": mapping.activity_code,
-        "rubric_id": mapping.rubric.id,
-        "rubric_title": mapping.rubric.title,
-        "assignment_id": mapping.assignment_id,
-    })
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser])
-def import_rubric_upload(request):
-    """Upload a rubric JSON file and (optionally) map it to an activity_code.
-
-    Form fields:
-      - file: uploaded JSON
-      - activity_code: optional (string like '013.03-c02')
-      - user_id: optional (creator); defaults to request.user.id
-    """
-    if not request.user.is_staff:
-        return Response({"error": "Only staff can import rubrics"}, status=status.HTTP_403_FORBIDDEN)
-
-    if "file" not in request.FILES:
-        return Response({"error": "Missing file"}, status=status.HTTP_400_BAD_REQUEST)
-
-    activity_code = request.POST.get("activity_code")
-    creator = request.user
-
-    try:
-        raw = request.FILES["file"].read().decode("utf-8")
-        data = json.loads(raw)
-    except Exception as e:
-        return Response({"error": f"Invalid JSON: {e}"}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Build rubric from JSON (similar to management command)
-    learning_target = data.get("learning_target", "")
-    rubric_description = learning_target
-    if "metadata" in data:
-        md = data["metadata"]
-        rubric_description += f"\n\nSource: {md.get('source_document', 'N/A')}"
-        if md.get("aligned_ngss"):
-            rubric_description += f"\nAligned to: {', '.join(md['aligned_ngss'])}"
-
-    with transaction.atomic():
-        rubric = Rubric.objects.create(
-            title=data.get("task_title", data.get("assignment_id", "Untitled Rubric")),
-            description=rubric_description,
-            total_points=data.get("max_score", 100),
-            created_by=creator,
-            is_active=True,
+    if not ai_service.is_configured():
+        return Response(
+            {"error": "AI service not configured"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
-
-        # Create criteria with enriched description
-        for idx, criterion_data in enumerate(data.get("criteria", [])):
-            criterion_title = criterion_data.get("title", f"Criterion {idx+1}")
-            description = criterion_title + "\n\n"
-
-            levels = criterion_data.get("levels", [])
-            if levels:
-                description += "Performance Levels:\n"
-                for level in levels:
-                    level_name = level.get("name", "Unknown")
-                    level_score = level.get("score")
-                    level_desc = level.get("description", "")
-                    if level_score is not None:
-                        description += f"• {level_name} ({level_score} pts): {level_desc}\n"
-                    else:
-                        description += f"• {level_name}: {level_desc}\n"
-                description += "\n"
-
-            examples = criterion_data.get("examples", {})
-            if examples:
-                description += "Examples:\n"
-                for k, v in examples.items():
-                    if v:
-                        description += f"• {k.title()}: {v}\n"
-                description += "\n"
-
-            auto_eval = criterion_data.get("auto_eval_rules", {})
-            if auto_eval:
-                description += "Evaluation Guidelines:\n"
-                if auto_eval.get("keywords_proficient"):
-                    description += f"Look for: {', '.join(auto_eval['keywords_proficient'])}\n"
-                if auto_eval.get("keywords_incorrect"):
-                    description += f"Avoid: {', '.join(auto_eval['keywords_incorrect'])}\n"
-                if isinstance(auto_eval.get("pattern_checks"), dict):
-                    for ck, cv in auto_eval["pattern_checks"].items():
-                        description += f"{ck}: {cv}\n"
-
-            # Determine max_points from levels or weight
-            max_points = 0
-            if levels:
-                scores = [lvl.get("score", 0) for lvl in levels if lvl.get("score") is not None]
-                if scores:
-                    max_points = max(scores)
-            if max_points == 0:
-                # Default weight if missing: split evenly across criteria (avoid div by zero)
-                criteria_count = max(len(data.get("criteria", [])), 1)
-                weight = criterion_data.get("weight", 1.0 / criteria_count)
-                max_points = int(weight * data.get("max_score", 100)) or 1
-
-            RubricCriterion.objects.create(
-                rubric=rubric,
-                name=criterion_data.get("id", criterion_title),
-                description=description.strip(),
-                max_points=max_points,
-                weight=criterion_data.get("weight", 1.0),
-                order=idx,
-            )
-
-        # Optionally create mapping
-        mapping_payload = None
-        if activity_code:
-            mapping, _ = ActivityRubricMap.objects.update_or_create(
-                activity_code=activity_code,
-                defaults={
-                    "rubric": rubric,
-                    "assignment_id": data.get("assignment_id", ""),
-                },
-            )
-            mapping_payload = {
-                "activity_code": mapping.activity_code,
-                "rubric_id": mapping.rubric.id,
-                "rubric_title": mapping.rubric.title,
-                "assignment_id": mapping.assignment_id,
-            }
-
-    return Response({
-        "message": "Rubric imported successfully",
-        "rubric_id": rubric.id,
-        "rubric_title": rubric.title,
-        "mapped": mapping_payload is not None,
-        "mapping": mapping_payload,
-    }, status=status.HTTP_201_CREATED)
-
-
-# Rubric Management ViewSet
-
-class RubricViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing grading rubrics
     
-    LIST:   GET    /api/grading/rubrics/
-    CREATE: POST   /api/grading/rubrics/
-    GET:    GET    /api/grading/rubrics/{id}/
-    UPDATE: PUT    /api/grading/rubrics/{id}/
-    PATCH:  PATCH  /api/grading/rubrics/{id}/
-    DELETE: DELETE /api/grading/rubrics/{id}/
+    submission_id = serializer.validated_data["submission_id"]
+    rubric_override = serializer.validated_data.get("rubric_json")
+    
+    try:
+        submission = ScienceActivitySubmission.objects.select_related("activity").get(
+            id=submission_id
+        )
+    except ScienceActivitySubmission.DoesNotExist:
+        return Response(
+            {"error": "Submission not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Check permissions - only the teacher assigned to grade can do this
+    if submission.teacher_id and submission.teacher_id != request.user.id:
+        # Allow if user is a teacher (has teacher profile)
+        if not hasattr(request.user, "teacher_profile"):
+            return Response(
+                {"error": "Not authorized to grade this submission"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+    
+    # Get the rubric - try override first, then mapped rubric, then default
+    rubric_data = rubric_override
+    if not rubric_data:
+        # Try to find a mapped rubric for this activity
+        activity_code = submission.activity.activity_id
+        rubric_map = ActivityRubricMap.objects.filter(activity_code=activity_code).first()
+        if rubric_map:
+            rubric_data = {
+                "title": rubric_map.rubric.title,
+                "criteria": [
+                    {
+                        "title": c.name,
+                        "description": c.description,
+                        "max_points": c.max_points,
+                        "weight": c.weight,
+                    }
+                    for c in rubric_map.rubric.criteria.all()
+                ],
+                "max_score": rubric_map.rubric.total_points,
+            }
+    
+    # Get all answers for this submission
+    answers = ActivityAnswer.objects.filter(submission=submission).order_by("question_number")
+    
+    if not answers.exists():
+        return Response(
+            {"error": "No answers found for this submission"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    grading_results = []
+    total_score = 0
+    max_possible = 0
+    total_tokens = 0
+    
+    # Grade each answer
+    for answer in answers:
+        try:
+            # Build the rubric text for this question
+            rubric_text = None
+            if rubric_data and "criteria" in rubric_data:
+                rubric_text = json.dumps(rubric_data["criteria"], indent=2)
+            
+            result = ai_service.evaluate_student_work(
+                question=answer.question_text,
+                student_answer=answer.student_answer or "",
+                rubric=rubric_text,
+                context=f"Activity: {submission.activity.activity_title}",
+            )
+            
+            # Parse the evaluation result
+            try:
+                evaluation = json.loads(result["evaluation"])
+                question_score = evaluation.get("score", 0)
+                feedback = evaluation.get("feedback", result["evaluation"])
+            except (json.JSONDecodeError, TypeError):
+                # If not JSON, use the raw text as feedback
+                question_score = 0
+                feedback = result["evaluation"]
+            
+            # Update the answer with AI feedback
+            answer.ai_feedback = feedback
+            answer.score = question_score
+            answer.save(update_fields=["ai_feedback", "score", "updated_at"])
+            
+            grading_results.append({
+                "question_number": answer.question_number,
+                "question_text": answer.question_text,
+                "student_answer": answer.student_answer,
+                "score": question_score,
+                "feedback": feedback,
+            })
+            
+            total_score += question_score
+            max_possible += 100  # Each question is out of 100
+            total_tokens += result.get("tokens_used", 0) or 0
+            
+        except Exception as e:
+            logger.error(f"Error grading answer {answer.id}: {e}")
+            grading_results.append({
+                "question_number": answer.question_number,
+                "error": str(e),
+            })
+    
+    # Update the submission status and overall score
+    if max_possible > 0:
+        normalized_score = (total_score / max_possible) * 100
+    else:
+        normalized_score = 0
+    
+    submission.status = "graded"
+    submission.score = round(normalized_score, 2)
+    submission.feedback_overview = f"AI grading completed for {len(grading_results)} questions."
+    submission.save(update_fields=["status", "score", "feedback_overview"])
+    
+    # Log the grading session
+    GradingSession.objects.create(
+        user=request.user,
+        activity_id=submission.activity.id,
+        prompt=f"Grade submission #{submission_id} with {len(answers)} answers",
+        response=json.dumps(grading_results),
+        model_used=ai_service._model or "unknown",
+        tokens_used=total_tokens,
+    )
+    
+    return Response({
+        "submission_id": submission.id,
+        "status": "graded",
+        "overall_score": submission.score,
+        "answers_graded": len(grading_results),
+        "tokens_used": total_tokens,
+        "results": grading_results,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_teacher_feedback(request):
     """
-    queryset = Rubric.objects.all()
+    Allow teacher to update/override AI feedback for an answer.
+    
+    Request body:
+    {
+        "answer_id": 123,
+        "teacher_feedback": "Good work, but consider...",
+        "score": 85
+    }
+    """
+    answer_id = request.data.get("answer_id")
+    teacher_feedback = request.data.get("teacher_feedback")
+    score = request.data.get("score")
+    
+    if not answer_id:
+        return Response(
+            {"error": "answer_id is required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        answer = ActivityAnswer.objects.select_related("submission").get(id=answer_id)
+    except ActivityAnswer.DoesNotExist:
+        return Response(
+            {"error": "Answer not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Update fields
+    if teacher_feedback is not None:
+        answer.teacher_feedback = teacher_feedback
+    if score is not None:
+        answer.score = score
+    
+    answer.save(update_fields=["teacher_feedback", "score", "updated_at"])
+    
+    return Response({
+        "answer_id": answer.id,
+        "teacher_feedback": answer.teacher_feedback,
+        "score": float(answer.score) if answer.score else None,
+        "updated_at": answer.updated_at,
+    })
+
+
+class RubricListCreateView(generics.ListCreateAPIView):
+    """List all rubrics or create a new one."""
+    
     serializer_class = RubricSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Filter rubrics - teachers see all, students see active only"""
-        queryset = super().get_queryset()
-        
-        # Filter by activity_id if provided
-        activity_id = self.request.query_params.get("activity_id")
-        if activity_id:
-            queryset = queryset.filter(activity_id=activity_id)
-        
-        # Only show active rubrics to non-staff
-        if not self.request.user.is_staff:
-            queryset = queryset.filter(is_active=True)
-        
-        return queryset
+        return Rubric.objects.filter(is_active=True).prefetch_related("criteria")
     
     def perform_create(self, serializer):
-        """Set created_by to current user"""
         serializer.save(created_by=self.request.user)
 
 
-class AssessmentSubmissionViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing assessment submissions
+class RubricDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a rubric."""
     
-    LIST:   GET    /api/grading/submissions/
-    CREATE: POST   /api/grading/submissions/
-    GET:    GET    /api/grading/submissions/{id}/
-    UPDATE: PUT    /api/grading/submissions/{id}/
-    """
-    queryset = AssessmentSubmission.objects.all()
-    serializer_class = AssessmentSubmissionSerializer
+    serializer_class = RubricSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Rubric.objects.prefetch_related("criteria")
+
+
+class GradingSessionListView(generics.ListAPIView):
+    """List grading sessions for audit/analytics."""
+    
+    serializer_class = GradingSessionSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Filter submissions - students see only their own, teachers see all"""
-        queryset = super().get_queryset()
+        queryset = GradingSession.objects.select_related("user")
         
+        # Filter by user if not staff
         if not self.request.user.is_staff:
-            queryset = queryset.filter(student=self.request.user)
+            queryset = queryset.filter(user=self.request.user)
         
-        # Filter by activity_id if provided
+        # Optional filters
         activity_id = self.request.query_params.get("activity_id")
         if activity_id:
             queryset = queryset.filter(activity_id=activity_id)
         
-        # Filter by status if provided
-        status_filter = self.request.query_params.get("status")
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-        
-        return queryset
-    
-    def perform_create(self, serializer):
-        """Set student to current user"""
-        serializer.save(student=self.request.user)
-    
-    @action(detail=True, methods=["post"], url_path="grade")
-    def grade_submission(self, request, pk=None):
-        """
-        Grade a submission using AI with its associated rubric
-        
-        POST /api/grading/submissions/{id}/grade/
-        Body: {
-            "context": "Optional additional context"
-        }
-        """
-        submission = self.get_object()
-        
-        # Check if submission already graded
-        if submission.status == "graded":
-            return Response(
-                {"message": "Submission already graded. Viewing existing grade."},
-                status=status.HTTP_200_OK
-            )
-        
-        # Ensure a rubric is attached; if missing, try to auto-map from activity_code
-        if not submission.rubric:
-            mapping = None
-            # Heuristic: submission.activity_id is an integer like 5 for codes like '005.04-c01'
-            try:
-                prefix = f"{int(submission.activity_id):03d}."
-                mapping = ActivityRubricMap.objects.select_related("rubric").filter(activity_code__startswith=prefix).first()
-            except Exception:
-                mapping = None
-
-            # Fallback: try to load ScienceActivity by any means and map via exact code
-            if not mapping:
-                try:
-                    # Prefer finding by code in the questions/context is not viable here; try DB id pk then
-                    activity = ScienceActivity.objects.filter(id=submission.activity_id).first()
-                    if activity:
-                        mapping = ActivityRubricMap.objects.select_related("rubric").filter(activity_code=activity.activity_id).first()
-                except Exception:
-                    mapping = None
-
-            if mapping:
-                submission.rubric = mapping.rubric
-                submission.save(update_fields=["rubric"]) 
-            else:
-                return Response(
-                    {"error": "No rubric attached and no mapping found for this activity"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        
-        # Get AI service
-        ai_service = get_ai_service()
-        if not ai_service.is_configured():
-            return Response(
-                {"error": "AI service not configured. Contact administrator."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-        
-        # Update status
-        submission.status = "grading"
-        submission.save()
-        
-        try:
-            # New default: level-based grading per question
-            request_context = request.data.get("context", "")
-
-            # If a rubric is attached, include a concise rubric summary in the context
-            rubric_summary = ""
-            if submission.rubric:
-                r = submission.rubric
-                rubric_summary_lines = [
-                    f"Rubric: {r.title}",
-                ]
-                # Add top-level description if present
-                if r.description:
-                    rubric_summary_lines.append(r.description)
-                rubric_summary_lines.append("Criteria (use to inform levels):")
-                for c in r.criteria.all():
-                    rubric_summary_lines.append(f"- {c.name}: {c.description}")
-                rubric_summary = "\n".join(rubric_summary_lines)
-
-            combined_context = request_context
-            if rubric_summary:
-                combined_context = (request_context + "\n\n" if request_context else "") + rubric_summary
-
-            lvl_result = ai_service.grade_levels_by_question(
-                question_text=submission.question_text,
-                answer_text=submission.answer_text,
-                context=combined_context,
-            )
-
-            # Save minimal results (no points)
-            submission.score = None
-            submission.max_score = None
-            submission.feedback = lvl_result.get("overall_feedback", "")
-            submission.status = "graded"
-            submission.graded_at = timezone.now()
-            submission.graded_by_ai = True
-            submission.ai_model_used = lvl_result.get("model_used", "unknown")
-            submission.tokens_used = lvl_result.get("tokens_used")
-            submission.save()
-
-            # Clear any existing criterion scores since we are not using points here
-            submission.criterion_scores.all().delete()
-
-            # Log session
-            GradingSession.objects.create(
-                user=request.user,
-                activity_id=submission.activity_id,
-                prompt=f"Level grading per question\nQ: {submission.question_text}\nA: {submission.answer_text}",
-                response=lvl_result.get("overall_feedback", ""),
-                model_used=lvl_result.get("model_used", "unknown"),
-                tokens_used=lvl_result.get("tokens_used"),
-            )
-
-            # Return submission plus question_levels in payload
-            serializer = self.get_serializer(submission)
-            data = serializer.data
-            data["question_levels"] = lvl_result.get("questions", [])
-            return Response(data)
-        
-        except Exception as e:
-            # Revert status on error
-            submission.status = "submitted"
-            submission.save()
-            
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    @action(detail=True, methods=["post"], url_path="review")
-    def teacher_review(self, request, pk=None):
-        """
-        Allow teacher to override AI grade
-        
-        POST /api/grading/submissions/{id}/review/
-        Body: {
-            "teacher_score": 85.0,
-            "teacher_feedback": "Additional feedback"
-        }
-        """
-        if not request.user.is_staff:
-            return Response(
-                {"error": "Only teachers can review submissions"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        submission = self.get_object()
-        
-        submission.teacher_score = request.data.get("teacher_score")
-        submission.teacher_feedback = request.data.get("teacher_feedback", "")
-        submission.reviewed_by = request.user
-        submission.reviewed_at = timezone.now()
-        submission.status = "reviewed"
-        submission.save()
-        
-        serializer = self.get_serializer(submission)
-        return Response(serializer.data)
+        return queryset.order_by("-created_at")[:100]
