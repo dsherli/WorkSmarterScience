@@ -16,7 +16,8 @@ from .models import (
     ClassroomActivity,
     ClassroomActivityAssignment,
     ClassroomTable,
-    TableMessage,
+    Announcement,
+    AnnouncementAttachment,
 )
 from .serializers import (
     ClassroomSerializer,
@@ -27,6 +28,8 @@ from .serializers import (
     StudentAssignmentSerializer,
     ClassroomTableSerializer,
     TableMessageSerializer,
+    AnnouncementSerializer,
+    AnnouncementAttachmentSerializer,
 )
 
 
@@ -58,7 +61,10 @@ class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Classroom.objects.filter(created_by=self.request.user)
+        user = self.request.user
+        return Classroom.objects.filter(
+            Q(created_by=user) | Q(enrollments__student=user)
+        ).distinct()
 
 
 class EnrollmentJoinView(generics.CreateAPIView):
@@ -209,8 +215,10 @@ class ClassroomActivityListView(generics.ListAPIView):
 
     def get_queryset(self):
         classroom_id = self.kwargs.get("classroom_id")
+        user = self.request.user
         classroom = get_object_or_404(
-            Classroom, pk=classroom_id, created_by=self.request.user
+            Classroom.objects.filter(Q(created_by=user) | Q(enrollments__student=user)).distinct(),
+            pk=classroom_id
         )
         self.classroom = classroom
         return (
@@ -326,10 +334,10 @@ class TeacherDashboardStatsView(APIView):
         ai_interactions = GradingSession.objects.filter(user=user).count()
         
         return Response({
-            "totalStudents": total_students,
-            "activeActivities": active_activities,
-            "avgCompletion": avg_completion,
-            "aiInteractions": ai_interactions
+            "total_students": total_students,
+            "active_activities": active_activities,
+            "avg_completion": avg_completion,
+            "ai_interactions": ai_interactions
         })
 
 class TeacherDashboardActivitiesView(APIView):
@@ -339,36 +347,18 @@ class TeacherDashboardActivitiesView(APIView):
         user = request.user
         classrooms = Classroom.objects.filter(created_by=user)
         
-        # Get activity IDs assigned to the teacher's classrooms
-        classroom_activity_ids = ClassroomActivity.objects.filter(
+        # Get recent ClassroomActivities assigned to the teacher's classrooms
+        activities = ClassroomActivity.objects.filter(
             classroom__in=classrooms
-        ).values_list("activity_id", flat=True)
+        ).prefetch_related("student_assignments").order_by("-assigned_at")[:10]
         
-        # Get recent submissions for those activities
-        recent_submissions = ScienceActivitySubmission.objects.filter(
-            activity__activity_id__in=classroom_activity_ids
-        ).select_related("activity", "student").order_by("-submitted_at")[:10]
+        activity_ids = [activity.activity_id for activity in activities]
+        activity_map = _activity_metadata(activity_ids)
         
-        activities = []
-        for submission in recent_submissions:
-            activities.append({
-                "id": submission.id,
-                "type": "submission",
-                "title": f"{submission.student.first_name or submission.student.username} submitted {submission.activity.activity_title or 'Activity'}",
-                "time": submission.submitted_at.isoformat() if submission.submitted_at else None,
-                "student": {
-                    "id": submission.student.id,
-                    "name": f"{submission.student.first_name or ''} {submission.student.last_name or ''}".strip() or submission.student.username,
-                },
-                "activity": {
-                    "id": submission.activity.id,
-                    "activity_id": submission.activity.activity_id,
-                    "title": submission.activity.activity_title,
-                },
-                "status": submission.status,
-            })
-        
-        return Response(activities)
+        serializer = ClassroomActivitySummarySerializer(
+            activities, many=True, context={"activity_map": activity_map}
+        )
+        return Response(serializer.data)
 
 class TeacherDashboardReviewsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -711,4 +701,83 @@ class SimilarResponseGroupsView(APIView):
             "total_submissions": submissions.count(),
             "groups": groups,
         })
+
+
+class AnnouncementListCreateView(generics.ListCreateAPIView):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        classroom_id = self.kwargs.get("classroom_id")
+        user = self.request.user
+        # Must be creator or enrolled
+        classroom = get_object_or_404(
+            Classroom.objects.filter(Q(created_by=user) | Q(enrollments__student=user)).distinct(),
+            pk=classroom_id
+        )
+        return Announcement.objects.filter(classroom=classroom)
+
+    def perform_create(self, serializer):
+        classroom_id = self.kwargs.get("classroom_id")
+        # Only creator (teacher) can create announcements
+        classroom = get_object_or_404(
+            Classroom, pk=classroom_id, created_by=self.request.user
+        )
+        announcement = serializer.save(classroom=classroom, author=self.request.user)
+        
+        # Handle file uploads
+        files = self.request.FILES.getlist('files')
+        for f in files:
+            AnnouncementAttachment.objects.create(
+                announcement=announcement,
+                file=f,
+                filename=f.name
+            )
+
+
+class AnnouncementDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        classroom_id = self.kwargs.get("classroom_id")
+        user = self.request.user
+        # Must be creator (teacher) to update/delete
+        # or enrolled to just retrieve
+        return Announcement.objects.filter(classroom_id=classroom_id)
+
+    def perform_update(self, serializer):
+        # Ensure only creator can update
+        announcement = self.get_object()
+        if announcement.author != self.request.user:
+            raise permissions.exceptions.PermissionDenied("Only the author can edit this announcement.")
+        
+        updated_announcement = serializer.save()
+        
+        # Handle new file uploads if any
+        files = self.request.FILES.getlist('files')
+        for f in files:
+            AnnouncementAttachment.objects.create(
+                announcement=updated_announcement,
+                file=f,
+                filename=f.name
+            )
+
+    def perform_destroy(self, instance):
+        # Ensure only creator can delete
+        if instance.author != self.request.user:
+            raise permissions.exceptions.PermissionDenied("Only the author can delete this announcement.")
+        instance.delete()
+
+
+class AnnouncementAttachmentDeleteView(generics.DestroyAPIView):
+    queryset = AnnouncementAttachment.objects.all()
+    serializer_class = AnnouncementAttachmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_destroy(self, instance):
+        # Ensure only the announcement author can delete attachments
+        if instance.announcement.author != self.request.user:
+            raise permissions.exceptions.PermissionDenied("Only the announcement author can delete attachments.")
+        instance.delete()
 

@@ -142,3 +142,36 @@ class ClassroomActivityAssignment(models.Model):
 
     def __str__(self):
         return f"{self.student.username} -> {self.classroom_activity.activity_id}"
+
+
+class Announcement(models.Model):
+    classroom = models.ForeignKey(
+        Classroom, related_name="announcements", on_delete=models.CASCADE
+    )
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "classroom_announcement"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.title} - {self.classroom.name}"
+
+
+class AnnouncementAttachment(models.Model):
+    announcement = models.ForeignKey(
+        Announcement, related_name="attachments", on_delete=models.CASCADE
+    )
+    file = models.FileField(upload_to="announcements/attachments/")
+    filename = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "classroom_announcement_attachment"
+
+    def __str__(self):
+        return f"Attachment for {self.announcement.title}: {self.filename}"

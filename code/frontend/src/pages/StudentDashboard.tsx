@@ -582,7 +582,7 @@ export function StudentDashboard() {
                         </Card>
                     </div>
 
-                    
+
                 </TabsContent>
 
                 {/* Classes */}
@@ -623,11 +623,7 @@ export function StudentDashboard() {
                                 {classesError}
                             </Card>
                         )}
-                        {!loadingClasses && !classesError && visibleClasses.length === 0 && (
-                            <Card className="p-6 text-sm text-gray-600">
-                                You aren&apos;t enrolled in any classes yet.
-                            </Card>
-                        )}
+
                         {!loadingClasses &&
                             !classesError &&
                             visibleClasses.length > 0 &&

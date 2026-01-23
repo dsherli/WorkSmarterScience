@@ -22,12 +22,10 @@ import { toast } from "sonner";
 import {
     BookOpen,
     Users,
-    Activity,
     Plus,
     MoreVertical,
     Clock,
     CheckCircle2,
-    AlertCircle,
     TrendingUp,
     MessageSquare,
     X,
@@ -57,13 +55,13 @@ interface DashboardStats {
 
 interface DashboardActivity {
     id: number;
-    title: string;
-    classroom: string;
-    submitted: number;
-    total: number;
-    needsReview: number;
-    dueDate: string | null;
-    status: "open" | "closed";
+    activity_title: string;
+    classroom_name?: string;
+    submitted_assignments: number;
+    total_assignments: number;
+    needs_review: number;
+    due_at: string | null;
+    status: "active" | "completed";
 }
 
 interface DashboardReview {
@@ -85,7 +83,6 @@ export function TeacherDashboard() {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState("overview");
     const [classrooms, setClassrooms] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
     const [isCreateClassroomOpen, setIsCreateClassroomOpen] = useState(false);
     const [selectedClassroomCode, setSelectedClassroomCode] = useState<string | null>(null);
     const [stats, setStats] = useState<DashboardStats>(mockStats);
@@ -99,9 +96,7 @@ export function TeacherDashboard() {
     const [deleteClassroomId, setDeleteClassroomId] = useState<number | null>(null);
     const [editClassroom, setEditClassroom] = useState<any>(null);
     const [isEditClassroomOpen, setIsEditClassroomOpen] = useState(false);
-    const [currentView, setCurrentView] = useState<'dashboard' | 'classroom' | 'activity'>('dashboard');
-    const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
-    const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+
 
     const colors = [
         "from-blue-500 to-blue-600",
@@ -175,7 +170,6 @@ export function TeacherDashboard() {
         if (!token) return toast.error("Not authenticated");
 
         try {
-            setIsLoading(true);
             const res = await fetch("/api/classrooms/", {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -200,7 +194,6 @@ export function TeacherDashboard() {
         } catch {
             toast.error("Network error while loading classrooms");
         } finally {
-            setIsLoading(false);
         }
     };
 
@@ -209,7 +202,7 @@ export function TeacherDashboard() {
         fetchDashboardData();
     }, []);
 
-    const handleCreateClassroom = async (values) => {
+    const handleCreateClassroom = async (values: z.infer<typeof createClassroomSchema>) => {
         const token = localStorage.getItem("access_token");
 
         const payload = JSON.stringify({
@@ -266,16 +259,9 @@ export function TeacherDashboard() {
         navigate(`/dashboard/classroom/${classroomId}`);
     };
 
-    const handleViewActivity = (activityId: string) => {
-        setSelectedActivityId(activityId);
-        setCurrentView('activity');
-    };
 
-    const handleBackToDashboard = () => {
-        setCurrentView('dashboard');
-        setSelectedClassroomId(null);
-        setSelectedActivityId(null);
-    };
+
+
 
     const handleEditClassroom = async (values: z.infer<typeof editClassroomSchema>) => {
         if (!editClassroom) return;
@@ -393,14 +379,14 @@ export function TeacherDashboard() {
                 <StatCard
                     icon={<Users className="w-5 h-5" />}
                     label="Total Students"
-                    value={stats.total_students.toString()}
+                    value={(stats?.total_students ?? 0).toString()}
                     change="Enrolled"
                     color="bg-blue-500"
                 />
                 <StatCard
                     icon={<BookOpen className="w-5 h-5" />}
                     label="Active Activities"
-                    value={stats.active_activities.toString()}
+                    value={(stats?.active_activities ?? 0).toString()}
                     change="Assignments"
                     color="bg-purple-500"
                 />
@@ -414,7 +400,7 @@ export function TeacherDashboard() {
                 <StatCard
                     icon={<MessageSquare className="w-5 h-5" />}
                     label="AI Interactions"
-                    value={stats.ai_interactions.toString()}
+                    value={(stats?.ai_interactions ?? 0).toString()}
                     change="Today"
                     color="bg-orange-500"
                 />
@@ -602,16 +588,16 @@ export function TeacherDashboard() {
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
-                                            <h3 className="text-lg">{activity.title}</h3>
-                                            <Badge variant={activity.status === "closed" ? "destructive" : "default"}>
-                                                {activity.status}
+                                            <h3 className="text-lg">{activity.activity_title}</h3>
+                                            <Badge variant={activity.status === "completed" ? "default" : "secondary"} className={activity.status === "completed" ? "bg-green-500 text-white" : ""}>
+                                                {activity.status === "completed" ? "Completed" : "Active"}
                                             </Badge>
                                         </div>
                                         <div className="flex items-center gap-4 text-sm text-gray-600">
-                                            <span>{activity.classroom}</span>
+                                            <span>{activity.classroom_name}</span>
                                             <span className="flex items-center gap-1">
                                                 <Clock className="w-4 h-4" />
-                                                {activity.dueDate ? new Date(activity.dueDate).toLocaleDateString() : "No Due Date"}
+                                                {activity.due_at ? new Date(activity.due_at).toLocaleDateString() : "No Due Date"}
                                             </span>
                                         </div>
                                     </div>
@@ -629,16 +615,16 @@ export function TeacherDashboard() {
                     <Card className="p-6">
                         <h2 className="text-xl mb-4">AI Feedback Awaiting Review</h2>
                         <div className="space-y-3">
-                            {recentActivities.filter(a => a.needsReview > 0).map((activity) => (
+                            {recentActivities.filter(a => (a.needs_review ?? 0) > 0).map((activity) => (
                                 <div key={activity.id} className="p-4 border rounded-lg">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <h3 className="mb-1">{activity.title}</h3>
-                                            <p className="text-sm text-gray-600">{activity.classroom}</p>
+                                            <h3 className="mb-1">{activity.activity_title}</h3>
+                                            <p className="text-sm text-gray-600">{activity.classroom_name}</p>
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <Badge variant="destructive" className="text-xs">
-                                                {activity.needsReview} pending reviews
+                                                {activity.needs_review} pending reviews
                                             </Badge>
                                             <Button>Review Feedback</Button>
                                         </div>
@@ -1018,19 +1004,19 @@ function ActivityItem({ activity }: ActivityItemProps) {
     return (
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div>
-                <div className="font-medium">{activity.title}</div>
+                <div className="font-medium">{activity.activity_title}</div>
                 <div className="text-sm text-gray-500">
-                    {activity.classroom} • Due: {activity.dueDate ? new Date(activity.dueDate).toLocaleDateString() : "No Due Date"}
+                    {activity.classroom_name} • Due: {activity.due_at ? new Date(activity.due_at).toLocaleDateString() : "No Due Date"}
                 </div>
             </div>
             <div className="flex items-center gap-4">
                 <div className="text-right">
-                    <div className="text-sm font-medium">{activity.submitted}/{activity.total}</div>
+                    <div className="text-sm font-medium">{activity.submitted_assignments}/{activity.total_assignments}</div>
                     <div className="text-xs text-gray-500">Submitted</div>
                 </div>
-                {activity.needsReview > 0 && (
+                {(activity.needs_review ?? 0) > 0 && (
                     <Badge variant="destructive" className="h-6">
-                        {activity.needsReview}
+                        {activity.needs_review}
                     </Badge>
                 )}
             </div>

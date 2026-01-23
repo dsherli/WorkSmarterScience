@@ -6,6 +6,10 @@ from .models import (
     Enrollment,
     ClassroomActivity,
     ClassroomActivityAssignment,
+    ClassroomTable,
+    TableMessage,
+    Announcement,
+    AnnouncementAttachment,
 )
 import random
 import string
@@ -48,14 +52,14 @@ class ClassroomSerializer(serializers.ModelSerializer):
             "updated_at",
             "enrollments",
         ]
-    read_only_fields = (
-        "id",
-        "code",
-        "created_by",
-        "created_at",
-        "updated_at",
-        "enrollments",
-    )
+        read_only_fields = (
+            "id",
+            "code",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "enrollments",
+        )
 
     def create(self, validated_data):
         user = self.context["request"].user
@@ -157,7 +161,9 @@ class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
     lp_text = serializers.SerializerMethodField()
     total_assignments = serializers.SerializerMethodField()
     submitted_assignments = serializers.SerializerMethodField()
+    needs_review = serializers.SerializerMethodField()
     average_score = serializers.SerializerMethodField()
+    classroom_name = serializers.CharField(source="classroom.name", read_only=True)
     status = serializers.SerializerMethodField()
 
     class Meta:
@@ -166,6 +172,7 @@ class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
             "id",
             "activity_id",
             "activity_title",
+            "classroom_name",
             "pe",
             "lp",
             "lp_text",
@@ -174,6 +181,7 @@ class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
             "status",
             "total_assignments",
             "submitted_assignments",
+            "needs_review",
             "average_score",
         ]
         read_only_fields = fields
@@ -210,6 +218,14 @@ class ClassroomActivitySummarySerializer(serializers.ModelSerializer):
             1
             for assignment in assignments
             if assignment.status in ("submitted", "completed")
+        )
+
+    def get_needs_review(self, obj):
+        assignments = self._get_assignments(obj)
+        return sum(
+            1
+            for assignment in assignments
+            if assignment.status == "submitted"
         )
 
     def get_average_score(self, obj):
@@ -386,4 +402,31 @@ class ClassroomTableSerializer(serializers.ModelSerializer):
         # Reverse to show chronological order
         reversed_msgs = list(reversed(messages))
         return TableMessageSerializer(reversed_msgs, many=True, context=self.context).data
+
+
+class AnnouncementAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnnouncementAttachment
+        fields = ["id", "file", "filename", "created_at"]
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.get_full_name", read_only=True)
+    attachments = AnnouncementAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Announcement
+        fields = [
+            "id",
+            "classroom",
+            "author",
+            "author_name",
+            "title",
+            "content",
+            "attachments",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "classroom", "author", "created_at", "updated_at", "attachments"]
+
 

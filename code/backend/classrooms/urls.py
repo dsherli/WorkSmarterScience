@@ -18,6 +18,9 @@ from .views import (
     AssignStudentToTableView,
     TableMessageListCreateView,
     SimilarResponseGroupsView,
+    AnnouncementListCreateView,
+    AnnouncementDetailView,
+    AnnouncementAttachmentDeleteView,
 )
 
 urlpatterns = [
@@ -64,4 +67,7 @@ urlpatterns = [
     path("<int:classroom_id>/tables/assign/", AssignStudentToTableView.as_view(), name="table-assign"),
     path("tables/<int:pk>/", ClassroomTableDetailView.as_view(), name="table-detail"),
     path("tables/<int:table_id>/messages/", TableMessageListCreateView.as_view(), name="table-messages"),
+    path("<int:classroom_id>/announcements/", AnnouncementListCreateView.as_view(), name="classroom-announcements"),
+    path("<int:classroom_id>/announcements/<int:pk>/", AnnouncementDetailView.as_view(), name="classroom-announcement-detail"),
+    path("announcements/attachments/<int:pk>/", AnnouncementAttachmentDeleteView.as_view(), name="delete-announcement-attachment"),
 ]

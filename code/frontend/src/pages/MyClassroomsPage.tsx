@@ -288,7 +288,7 @@ export default function ClassroomsPage() {
     return (
         <div className="p-8 bg-gray-50 min-h-[calc(100vh-4rem)]">
             <div className="flex items-center justify-between mb-6">
-                <h1 className="text-3xl font-semibold">My Classrooms</h1>
+                <h1 className="text-3xl font-semibold">My Classroom</h1>
                 <Button
                     className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
                     onClick={() => setIsCreateClassroomOpen(true)}
@@ -384,7 +384,7 @@ export default function ClassroomsPage() {
                                     onClick={() => setSelectedClassroomCode(classroom.code)}
                                 >
                                     Code
-                                    </Button>
+                                </Button>
                             </div>
                         </Card>
                     ))}

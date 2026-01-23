@@ -1,6 +1,9 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Classroom, Student, Enrollment } from './types';
+import type { Classroom, Enrollment } from './types';
+import { useAuth } from '../auth/AuthContext';
 
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -10,6 +13,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Progress } from '../components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -31,22 +40,21 @@ import {
     Earth,
     Wrench,
     ArrowLeft,
-    Search,
-    Beaker,
-    Cpu,
+
     ChevronRight,
+    Megaphone,
+    Paperclip,
+    File,
+    Download,
+    X,
+    MoreVertical,
+    Trash2,
+    Edit,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-react';
 
-function StudentRow({ student }: { student: Student }) {
-    return (
-        <TableRow>
-            <TableCell>{student.first_name} {student.last_name}</TableCell>
-            <TableCell className="text-gray-600">{student.email}</TableCell>
-            <TableCell>
-            </TableCell>
-        </TableRow>
-    );
-}
+
 
 type ClassroomAssignedActivity = {
     id: number;
@@ -63,9 +71,134 @@ type ClassroomAssignedActivity = {
     average_score: number | null;
 };
 
+type Announcement = {
+    id: number;
+    title: string;
+    content: string;
+    author_name: string;
+    created_at: string;
+    attachments?: {
+        id: number;
+        file: string;
+        filename: string;
+    }[];
+};
+
+const AnnouncementCard = ({
+    ann,
+    isTeacher,
+    onEdit,
+    onDelete
+}: {
+    ann: Announcement,
+    isTeacher: boolean,
+    onEdit: (ann: Announcement) => void,
+    onDelete: (id: number) => void
+}) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [isOverflowing, setIsOverflowing] = useState(false);
+    const contentRef = useRef<HTMLDivElement>(null);
+    const MAX_HEIGHT = 150; // px
+
+    useEffect(() => {
+        if (contentRef.current) {
+            setIsOverflowing(contentRef.current.scrollHeight > MAX_HEIGHT);
+        }
+    }, [ann.content]);
+
+    return (
+        <Card className="p-5 border-l-4 border-l-teal-500 relative">
+            <div className="flex justify-between items-start mb-2 pr-8">
+                <h3 className="text-lg font-semibold">{ann.title}</h3>
+                {isTeacher && (
+                    <div className="absolute top-4 right-4">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onEdit(ann)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    <span>Edit</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={() => onDelete(ann.id)}
+                                    className="text-red-600 focus:text-red-700"
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Delete</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )}
+            </div>
+
+            <div
+                ref={contentRef}
+                className={`text-gray-700 prose prose-sm max-w-none transition-all duration-300 relative ${!isExpanded && isOverflowing ? 'max-h-[150px] overflow-hidden' : ''
+                    }`}
+            >
+                <div dangerouslySetInnerHTML={{ __html: ann.content }} />
+
+                {!isExpanded && isOverflowing && (
+                    <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+                )}
+            </div>
+
+            {isOverflowing && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="mt-2 text-teal-600 hover:text-teal-700 hover:bg-teal-50 p-0 h-auto font-medium"
+                >
+                    {isExpanded ? (
+                        <div className="flex items-center gap-1">
+                            <span>Show Less</span>
+                            <ChevronUp className="w-4 h-4" />
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1">
+                            <span>Read More</span>
+                            <ChevronDown className="w-4 h-4" />
+                        </div>
+                    )}
+                </Button>
+            )}
+
+            {ann.attachments && ann.attachments.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                    {ann.attachments.map((file) => (
+                        <a
+                            key={file.id}
+                            href={file.file}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-600 transition-colors"
+                        >
+                            <File className="w-4 h-4" />
+                            <span>{file.filename}</span>
+                            <Download className="w-3.5 h-3.5 ml-1 opacity-60" />
+                        </a>
+                    ))}
+                </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t text-xs text-gray-500">
+                {new Date(ann.created_at).toLocaleDateString()}
+            </div>
+        </Card>
+    );
+};
+
 export default function ClassroomPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const isTeacher = user?.role === 'teacher';
 
     const [classroom, setClassroom] = useState<Classroom | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -90,6 +223,17 @@ export default function ClassroomPage() {
         day: '',
         year: '',
     });
+
+    // Announcements
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
+    const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+    const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '' });
+    const [editingAnnouncementId, setEditingAnnouncementId] = useState<number | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    // Define type for existing attachments locally or import if available
+    const [existingAttachments, setExistingAttachments] = useState<any[]>([]);
+    const [isCreatingAnnouncement, setIsCreatingAnnouncement] = useState(false);
 
     useEffect(() => {
         if (!selectedCategory) return;
@@ -139,6 +283,142 @@ export default function ClassroomPage() {
             setActivitiesLoading(false);
         }
     }, [id]);
+
+    const fetchAnnouncements = useCallback(async () => {
+        if (!id) return;
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+
+        setIsAnnouncementsLoading(true);
+        try {
+            const res = await fetch(`/api/classrooms/${id}/announcements/`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setAnnouncements(data);
+            }
+        } catch (error) {
+            console.error('Failed to load announcements', error);
+        } finally {
+            setIsAnnouncementsLoading(false);
+        }
+    }, [id]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setSelectedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleCreateAnnouncement = async () => {
+        if (!newAnnouncement.title || !newAnnouncement.content) {
+            toast.error('Please fill in both title and content');
+            return;
+        }
+
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+
+        setIsCreatingAnnouncement(true);
+        try {
+            const formData = new FormData();
+            formData.append('title', newAnnouncement.title);
+            formData.append('content', newAnnouncement.content);
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            const url = editingAnnouncementId
+                ? `/api/classrooms/${id}/announcements/${editingAnnouncementId}/`
+                : `/api/classrooms/${id}/announcements/`;
+
+            const res = await fetch(url, {
+                method: editingAnnouncementId ? 'PATCH' : 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (res.ok) {
+                toast.success(editingAnnouncementId ? 'Announcement updated' : 'Announcement posted');
+                setNewAnnouncement({ title: '', content: '' });
+                setSelectedFiles([]);
+                setEditingAnnouncementId(null);
+                setShowAnnouncementModal(false);
+                fetchAnnouncements();
+            } else {
+                toast.error(editingAnnouncementId ? 'Failed to update announcement' : 'Failed to post announcement');
+            }
+        } catch (error) {
+            toast.error('Network error');
+        } finally {
+            setIsCreatingAnnouncement(false);
+        }
+    };
+
+    const handleDeleteAnnouncement = async (ann_id: number) => {
+        if (!window.confirm('Are you sure you want to delete this announcement?')) return;
+
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+
+        try {
+            const res = await fetch(`/api/classrooms/${id}/announcements/${ann_id}/`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            if (res.ok) {
+                toast.success('Announcement deleted');
+                fetchAnnouncements();
+            } else {
+                toast.error('Failed to delete announcement');
+            }
+        } catch (error) {
+            toast.error('Network error');
+        }
+    };
+
+    const handleDeleteAttachment = async (attachmentId: number) => {
+        if (!window.confirm('Are you sure you want to remove this attachment?')) return;
+
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+
+        try {
+            const res = await fetch(`/api/classrooms/announcements/attachments/${attachmentId}/`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            if (res.ok) {
+                toast.success('Attachment removed');
+                setExistingAttachments(prev => prev.filter(att => att.id !== attachmentId));
+                fetchAnnouncements(); // Refresh main list to reflect changes
+            } else {
+                toast.error('Failed to remove attachment');
+            }
+        } catch (error) {
+            toast.error('Network error');
+        }
+    };
+
+    const handleEditClick = (ann: Announcement) => {
+        setNewAnnouncement({ title: ann.title, content: ann.content });
+        setEditingAnnouncementId(ann.id);
+        setExistingAttachments(ann.attachments || []);
+        setShowAnnouncementModal(true);
+    };
 
     const buildDueDateIso = () => {
         if (!dueDate) return null;
@@ -263,7 +543,8 @@ export default function ClassroomPage() {
 
     useEffect(() => {
         fetchClassActivities();
-    }, [fetchClassActivities]);
+        fetchAnnouncements();
+    }, [fetchClassActivities, fetchAnnouncements]);
 
     useEffect(() => {
         const { year, month, day } = dueDateParts;
@@ -290,11 +571,7 @@ export default function ClassroomPage() {
             : 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white';
     };
 
-    const getEngagementColor = (engagement: number) => {
-        if (engagement >= 90) return 'text-green-600';
-        if (engagement >= 70) return 'text-yellow-600';
-        return 'text-red-600';
-    };
+
 
     if (isLoading) {
         return (
@@ -387,66 +664,169 @@ export default function ClassroomPage() {
                                     </Button>
                                 </div>
                             </div>
-                            <Button
-                                onClick={handleOpenAddModal}
-                                className="bg-gradient-to-r from-teal-500 to-cyan-600 text-white hover:from-teal-600 hover:to-cyan-700"
-                            >
-                                Add Activity
-                            </Button>
+                            {isTeacher && (
+                                <Button
+                                    onClick={handleOpenAddModal}
+                                    className="bg-gradient-to-r from-teal-500 to-cyan-600 text-white hover:from-teal-600 hover:to-cyan-700"
+                                >
+                                    Add Activity
+                                </Button>
+                            )}
                         </div>
 
-                        {/* Quick Stats */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
-                                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
-                                    <Users className="w-6 h-6" />
+                        {/* Quick Stats or Latest Announcement */}
+                        {isTeacher ? (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
+                                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
+                                        <Users className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Students</p>
+                                        <p className="text-2xl">{classroom.enrollments.length}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Students</p>
-                                    <p className="text-2xl">{classroom.enrollments.length}</p>
-                                </div>
-                            </div>
 
-                            <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
-                                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
-                                    <Activity className="w-6 h-6" />
+                                <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
+                                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
+                                        <Activity className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Active Activities</p>
+                                        <p className="text-2xl">{activitiesLoading ? '...' : activeActivityCount}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Active Activities</p>
-                                    <p className="text-2xl">{activitiesLoading ? '...' : activeActivityCount}</p>
-                                </div>
-                            </div>
 
-                            <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
-                                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
-                                    <CheckCircle2 className="w-6 h-6" />
+                                <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
+                                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
+                                        <CheckCircle2 className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Avg Completion</p>
+                                        <p className="text-2xl">{averageCompletion !== null ? `${averageCompletion}%` : 'N/A'}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Avg Completion</p>
-                                    <p className="text-2xl">{averageCompletion !== null ? `${averageCompletion}%` : 'N/A'}</p>
-                                </div>
-                            </div>
 
-                            <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
-                                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
-                                    <TrendingUp className="w-6 h-6" />
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Avg Score</p>
-                                    <p className="text-2xl">{averageScore !== null ? `${averageScore}%` : 'N/A'}</p>
+                                <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-100 to-teal-100 rounded-lg">
+                                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-600 to-teal-600 flex items-center justify-center text-white shadow-md">
+                                        <TrendingUp className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Avg Score</p>
+                                        <p className="text-2xl">{averageScore !== null ? `${averageScore}%` : 'N/A'}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="p-5 bg-teal-50/50 border border-teal-100 rounded-xl">
+                                <div className="flex items-center gap-2 mb-3 text-teal-800 font-semibold">
+                                    <Megaphone className="w-5 h-5" />
+                                    <span>Latest Announcement</span>
+                                </div>
+                                {announcements.length > 0 ? (
+                                    <AnnouncementCard
+                                        ann={announcements[0]}
+                                        isTeacher={false}
+                                        onEdit={() => { }}
+                                        onDelete={() => { }}
+                                    />
+                                ) : (
+                                    <p className="text-gray-500 italic text-sm">No announcements yet from your teacher.</p>
+                                )}
+                            </div>
+                        )}
                     </Card>
                 </div>
 
                 {/* Tabs */}
-                <Tabs defaultValue="activities" className="space-y-4">
+                <Tabs defaultValue={isTeacher ? "announcements" : "activities"} className="space-y-4">
                     <TabsList className="bg-white/80 backdrop-blur-sm">
                         <TabsTrigger value="activities">Activities</TabsTrigger>
-                        <TabsTrigger value="students">Students</TabsTrigger>
-                        <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                        <TabsTrigger value="announcements">Announcements</TabsTrigger>
+                        {isTeacher && <TabsTrigger value="students">Students</TabsTrigger>}
+                        {isTeacher && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
                     </TabsList>
+
+                    {/* Announcements Tab */}
+                    <TabsContent value="announcements">
+                        <Card className="p-6 bg-white/80 backdrop-blur-sm">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl">Class Announcements</h2>
+                                {isTeacher && (
+                                    <Button
+                                        onClick={() => setShowAnnouncementModal(true)}
+                                        className="bg-teal-600 hover:bg-teal-700 text-white"
+                                    >
+                                        <Megaphone className="w-4 h-4 mr-2" />
+                                        Post Announcement
+                                    </Button>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                {isAnnouncementsLoading && <p className="text-gray-500">Loading announcements...</p>}
+                                {!isAnnouncementsLoading && announcements.length === 0 && (
+                                    <div className="text-center py-12">
+                                        <Megaphone className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                                        <p className="text-gray-500">No announcements yet.</p>
+                                    </div>
+                                )}
+
+                                {!isAnnouncementsLoading && announcements.map((ann) => (
+                                    isTeacher ? (
+                                        <AnnouncementCard
+                                            key={ann.id}
+                                            ann={ann}
+                                            isTeacher={isTeacher}
+                                            onEdit={handleEditClick}
+                                            onDelete={handleDeleteAnnouncement}
+                                        />
+                                    ) : (
+                                        <details key={ann.id} className="group bg-white border rounded-lg p-2 open:shadow-md transition-shadow">
+                                            <summary className="flex items-center justify-between cursor-pointer p-2 font-medium text-gray-800 list-none">
+                                                <div className="flex items-center gap-3">
+                                                    <Megaphone className="w-4 h-4 text-teal-600" />
+                                                    <span>{ann.title}</span>
+                                                    <span className="text-xs text-gray-400 font-normal ml-2">
+                                                        {new Date(ann.created_at).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <ChevronDown className="w-4 h-4 text-gray-400 group-open:rotate-180 transition-transform" />
+                                            </summary>
+                                            <div className="mt-2 pl-4 pr-2 pb-2 border-t pt-2">
+                                                {/* Reuse AnnouncementCard but without extra padding/borders if simpler, 
+                                                    or just use it directly. Using it ensures consistent appearance. */}
+                                                <div className="pt-2">
+                                                    <div
+                                                        className="text-gray-700 prose prose-sm max-w-none"
+                                                        dangerouslySetInnerHTML={{ __html: ann.content }}
+                                                    />
+
+                                                    {ann.attachments && ann.attachments.length > 0 && (
+                                                        <div className="mt-4 flex flex-wrap gap-2">
+                                                            {ann.attachments.map((file) => (
+                                                                <a
+                                                                    key={file.id}
+                                                                    href={file.file}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-600 transition-colors"
+                                                                >
+                                                                    <File className="w-4 h-4" />
+                                                                    <span>{file.filename}</span>
+                                                                    <Download className="w-3.5 h-3.5 ml-1 opacity-60" />
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </details>
+                                    )
+                                ))}
+                            </div>
+                        </Card>
+                    </TabsContent>
 
                     {/* Activities */}
                     <TabsContent value="activities">
@@ -491,7 +871,11 @@ export default function ClassroomPage() {
                                 return (
                                     <Card
                                         key={activity.id}
-                                        onClick={() => navigate(`/dashboard/activities?classroom=${classroom.id}&activity=${activity.activity_id}`)}
+                                        onClick={() => navigate(
+                                            isTeacher
+                                                ? `/dashboard/activities?classroom=${classroom.id}&activity=${activity.activity_id}`
+                                                : `/assessment/${classroom.id}/${activity.activity_id}`
+                                        )}
                                         className="p-5 bg-white/80 backdrop-blur-sm hover:shadow-lg transition-shadow cursor-pointer"
                                     >
                                         <div className="flex items-center justify-between">
@@ -839,7 +1223,7 @@ export default function ClassroomPage() {
                                                             </label>
                                                             <Input
                                                                 type="number"
-                                                                value={dueDateParts[field.id]}
+                                                                value={dueDateParts[field.id as keyof typeof dueDateParts]}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
                                                                     if (!/^\d*$/.test(val)) return;
@@ -1034,6 +1418,158 @@ export default function ClassroomPage() {
                                     {assigningActivity ? 'Assigning...' : 'Add to Classroom'}
                                 </Button>
                             )}
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Create Announcement Dialog */}
+                <Dialog open={showAnnouncementModal} onOpenChange={(open) => {
+                    setShowAnnouncementModal(open);
+                    if (!open) {
+                        setNewAnnouncement({ title: '', content: '' });
+                        setEditingAnnouncementId(null);
+                        setExistingAttachments([]);
+                        setSelectedFiles([]);
+                    }
+                }}>
+                    <DialogContent className="sm:max-w-[500px] bg-white rounded-xl">
+                        <DialogHeader>
+                            <DialogTitle>{editingAnnouncementId ? 'Edit Announcement' : 'Post New Announcement'}</DialogTitle>
+                            <DialogDescription>
+                                {editingAnnouncementId ? 'Make changes to your announcement.' : 'Share important information with your students.'}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4 py-4 isolate">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Title</label>
+                                <Input
+                                    placeholder="e.g., Welcome to the class!"
+                                    value={newAnnouncement.title}
+                                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-2 pb-12">
+                                <label className="text-sm font-medium">Content</label>
+                                <div className="h-48">
+                                    <ReactQuill
+                                        theme="snow"
+                                        value={newAnnouncement.content}
+                                        onChange={(content) => setNewAnnouncement({ ...newAnnouncement, content })}
+                                        className="h-full"
+                                        modules={{
+                                            toolbar: [
+                                                [{ 'header': [1, 2, false] }],
+                                                ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                                ['link'],
+                                                ['clean']
+                                            ],
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                    <Paperclip className="w-4 h-4" />
+                                    Attachments
+                                </label>
+
+                                <div className="flex flex-col gap-3">
+                                    <Input
+                                        type="file"
+                                        id="file-upload"
+                                        className="hidden"
+                                        multiple
+                                        onChange={handleFileChange}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => document.getElementById('file-upload')?.click()}
+                                        className="w-full border-dashed border-2 py-8 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-600 group transition-all"
+                                    >
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Paperclip className="w-6 h-6 text-gray-400 group-hover:text-teal-500 transition-colors" />
+                                            <span className="text-sm font-normal text-gray-500 group-hover:text-teal-600">
+                                                Click to upload files
+                                            </span>
+                                        </div>
+                                    </Button>
+
+                                    {/* Existing Attachments List */}
+                                    {existingAttachments.length > 0 && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Current Attachments</label>
+                                            {existingAttachments.map((att) => (
+                                                <div
+                                                    key={att.id}
+                                                    className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-100 rounded-lg text-sm"
+                                                >
+                                                    <div className="flex items-center gap-2 truncate pr-4">
+                                                        <File className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                                        <a
+                                                            href={att.file}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="truncate hover:underline text-blue-700"
+                                                        >
+                                                            {att.filename}
+                                                        </a>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDeleteAttachment(att.id)}
+                                                        className="p-1 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors text-gray-400"
+                                                        title="Remove attachment"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {selectedFiles.length > 0 && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">New Uploads</label>
+                                            {selectedFiles.map((file, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="flex items-center justify-between p-2.5 bg-gray-50 border rounded-lg text-sm"
+                                                >
+                                                    <div className="flex items-center gap-2 truncate pr-4">
+                                                        <File className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                                                        <span className="truncate">{file.name}</span>
+                                                        <span className="text-xs text-gray-400 flex-shrink-0">
+                                                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => removeFile(idx)}
+                                                        className="p-1 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors text-gray-400"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setShowAnnouncementModal(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleCreateAnnouncement}
+                                disabled={isCreatingAnnouncement}
+                                className="bg-teal-600 hover:bg-teal-700 text-white"
+                            >
+                                {isCreatingAnnouncement ? (editingAnnouncementId ? 'Updating...' : 'Posting...') : (editingAnnouncementId ? 'Update Announcement' : 'Post Announcement')}
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

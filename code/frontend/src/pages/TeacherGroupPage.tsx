@@ -1,17 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
 import { groupsApi } from "../api/groups";
-
-// fetchWithAuth helper for fetching classrooms
-const fetchWithAuth = async (url: string) => {
-    const token = localStorage.getItem("access_token");
-    const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-    };
-    const res = await fetch(`/api${url}`, { headers });
-    if (!res.ok) throw new Error(res.statusText);
-    return res.json();
-};
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -40,7 +28,24 @@ import {
     ZoomOut,
     Minimize2,
     Users,
+    X,
+    PlusCircle,
+    RotateCcw,
+    Minus,
+    Plus,
 } from "lucide-react";
+
+// fetchWithAuth helper for fetching classrooms
+const fetchWithAuth = async (url: string) => {
+    const token = localStorage.getItem("access_token");
+    const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+    };
+    const res = await fetch(`/api${url}`, { headers });
+    if (!res.ok) throw new Error(res.statusText);
+    return res.json();
+};
 
 interface Student {
     id: string;
@@ -79,8 +84,6 @@ export default function TeacherGroupPage() {
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-    const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-    const [assigningTable, setAssigningTable] = useState<Table | null>(null);
     const classroomRef = useRef<HTMLDivElement>(null);
 
     // New API State
@@ -246,25 +249,40 @@ export default function TeacherGroupPage() {
                         position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
                     }));
                     setTables(formattedTables);
+                    refreshPanZoom(num);
+                });
+        }
+    };
 
-                    // Auto zoom logic (same as before)
-                    let autoZoom = 1;
-                    if (num >= 10) autoZoom = 0.6;
-                    else if (num >= 7) autoZoom = 0.75;
-                    else if (num >= 4) autoZoom = 0.9;
-                    setZoom(autoZoom);
-                    // Reset pan/zoom
-                    setTimeout(() => {
-                        if (classroomRef.current) {
-                            const containerWidth = classroomRef.current.clientWidth;
-                            const containerHeight = classroomRef.current.clientHeight;
-                            const contentWidth = 1600;
-                            const contentHeight = 1700;
-                            const centerX = (containerWidth - contentWidth * autoZoom) / 2;
-                            const centerY = (containerHeight - contentHeight * autoZoom) / 2;
-                            setPan({ x: Math.max(0, centerX), y: Math.max(0, centerY) });
-                        }
-                    }, 0);
+    const refreshPanZoom = (num: number) => {
+        // Auto zoom logic
+        let autoZoom = 1;
+        if (num >= 10) autoZoom = 0.6;
+        else if (num >= 7) autoZoom = 0.75;
+        else if (num >= 4) autoZoom = 0.9;
+        setZoom(autoZoom);
+
+        setTimeout(() => {
+            if (classroomRef.current) {
+                const containerWidth = classroomRef.current.clientWidth;
+                const containerHeight = classroomRef.current.clientHeight;
+                const contentWidth = 1600;
+                const contentHeight = 1700;
+                const centerX = (containerWidth - contentWidth * autoZoom) / 2;
+                const centerY = (containerHeight - contentHeight * autoZoom) / 2;
+                setPan({ x: Math.max(0, centerX), y: Math.max(0, centerY) });
+            }
+        }, 0);
+    };
+
+    const handleResetTables = () => {
+        if (!selectedClassroom) return;
+        if (confirm("Are you sure you want to reset the classroom layout? All table assignments will be lost.")) {
+            groupsApi.replaceTables(selectedClassroom, [])
+                .then(() => {
+                    setTables([]);
+                    setSelectedTable(null);
+                    setNumberOfTables("");
                 });
         }
     };
@@ -274,49 +292,48 @@ export default function TeacherGroupPage() {
 
         groupsApi.assignStudent(selectedClassroom, studentId, tableId)
             .then(() => {
-                // Determine previous table to remove student from locally, or just refresh?
-                // Refreshing tables is safer but slower.
-                // Optimistic update:
+                refreshTables();
+            });
+    };
 
-                setTables((prevTables) =>
-                    prevTables.map((table) => {
-                        const isInThisTable = table.students.some((s) => s.id === studentId);
-                        if (isInThisTable && table.id !== tableId) {
-                            return { ...table, students: table.students.filter((s) => s.id !== studentId) };
-                        }
-                        if (table.id === tableId && !table.students.some(s => s.id === studentId)) {
-                            const student = allStudents.find(s => s.id === studentId);
-                            return { ...table, students: [...table.students, student!] };
-                        }
-                        return table;
-                    })
-                );
+    const handleRemoveStudent = (studentId: string) => {
+        if (!selectedClassroom) return;
+        // Assign to null to remove (assuming backend handles null table_id as unassign)
+        groupsApi.assignStudent(selectedClassroom, studentId, null)
+            .then(() => {
+                refreshTables();
+            });
+    };
 
-                // Refresh from server to be sure
-                groupsApi.getTables(selectedClassroom)
-                    .then((data) => {
-                        const formattedTables = data.map((t: any) => ({
-                            id: t.id.toString(),
-                            name: t.name,
-                            topic: "",
-                            students: t.students.map((s: any) => ({
-                                id: s.id.toString(),
-                                name: s.name,
-                                initials: s.initials,
-                                avatar: s.avatar,
-                                color: s.color
-                            })),
-                            messages: t.messages.map((m: any) => ({
-                                id: m.id.toString(),
-                                studentId: m.sender.toString(),
-                                studentName: m.sender_name,
-                                text: m.content,
-                                timestamp: new Date(m.timestamp)
-                            })),
-                            position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
-                        }));
-                        setTables(formattedTables);
-                    });
+    const refreshTables = () => {
+        groupsApi.getTables(selectedClassroom)
+            .then((data) => {
+                const formattedTables = data.map((t: any) => ({
+                    id: t.id.toString(),
+                    name: t.name,
+                    topic: "",
+                    students: t.students.map((s: any) => ({
+                        id: s.id.toString(),
+                        name: s.name,
+                        initials: s.initials,
+                        avatar: s.avatar,
+                        color: s.color
+                    })),
+                    messages: t.messages.map((m: any) => ({
+                        id: m.id.toString(),
+                        studentId: m.sender.toString(),
+                        studentName: m.sender_name,
+                        text: m.content,
+                        timestamp: new Date(m.timestamp)
+                    })),
+                    position: { x: t.x_position, y: t.y_position, rotation: t.rotation }
+                }));
+                setTables(formattedTables);
+                // Also update selectedTable if it matches
+                if (selectedTable) {
+                    const updated = formattedTables.find((t: any) => t.id === selectedTable.id);
+                    if (updated) setSelectedTable(updated);
+                }
             });
     };
 
@@ -412,24 +429,38 @@ export default function TeacherGroupPage() {
                                 </SelectContent>
                             </Select>
 
-                            <Input
-                                type="number"
-                                min="1"
-                                max="12"
-                                placeholder="# Tables"
-                                value={numberOfTables}
-                                onChange={(e) => setNumberOfTables(e.target.value)}
-                                className="h-8 w-24"
-                            />
+                            {tables.length === 0 ? (
+                                <>
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        max="12"
+                                        placeholder="# Tables"
+                                        value={numberOfTables}
+                                        onChange={(e) => setNumberOfTables(e.target.value)}
+                                        className="h-8 w-24"
+                                    />
 
-                            <Button
-                                onClick={handleCreateTables}
-                                className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 h-8"
-                                size="sm"
-                            >
-                                <Grid3x3 className="w-4 h-4 mr-1" />
-                                Create
-                            </Button>
+                                    <Button
+                                        onClick={handleCreateTables}
+                                        className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 h-8"
+                                        size="sm"
+                                    >
+                                        <Grid3x3 className="w-4 h-4 mr-1" />
+                                        Create
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    onClick={handleResetTables}
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-8 bg-red-500 hover:bg-red-600 text-white"
+                                >
+                                    <RotateCcw className="w-4 h-4 mr-1" />
+                                    Reset
+                                </Button>
+                            )}
                         </div>
                     </div>
 
@@ -493,15 +524,12 @@ export default function TeacherGroupPage() {
                                                     table={table}
                                                     isSelected={selectedTable?.id === table.id}
                                                     onClick={() => {
-                                                        setSelectedTable(table);
-                                                        setAssigningTable(table);
-                                                        setAssignDialogOpen(true);
+                                                        if (selectedTable?.id === table.id) {
+                                                            setSelectedTable(null);
+                                                        } else {
+                                                            setSelectedTable(table);
+                                                        }
                                                     }}
-                                                    onAssignStudent={handleAssignStudent}
-                                                    allStudents={allStudents}
-                                                    tables={tables}
-                                                    assignDialogOpen={assignDialogOpen && assigningTable?.id === table.id}
-                                                    setAssignDialogOpen={setAssignDialogOpen}
                                                 />
                                             ))}
                                         </div>
@@ -539,69 +567,106 @@ export default function TeacherGroupPage() {
                                 </p>
                             </div>
 
-                            <div className="p-4 border-b">
-                                <Label className="text-xs text-gray-600 mb-3 block">Participants</Label>
-                                <div className="space-y-2">
-                                    {selectedTable.students.map((student) => (
-                                        <div key={student.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                                            <div
-                                                className={`w-10 h-10 rounded-full bg-gradient-to-br ${student.color} flex items-center justify-center text-xl shadow-md`}
-                                            >
-                                                {student.avatar}
-                                            </div>
-                                            <span className="text-sm flex-1">{student.name}</span>
-                                            <div className="w-2 h-2 bg-green-500 rounded-full" />
-                                        </div>
-                                    ))}
-                                    {selectedTable.students.length === 0 && (
-                                        <p className="text-sm text-gray-500 text-center py-4">No students assigned yet</p>
-                                    )}
-                                </div>
-                            </div>
-
                             <div className="flex-1 flex flex-col min-h-0">
-                                <div className="p-4 pb-2">
-                                    <Label className="text-xs text-gray-600">Discussion</Label>
-                                </div>
-
                                 <ScrollArea className="flex-1 px-4">
-                                    {selectedTable.messages.length === 0 ? (
-                                        <p className="text-sm text-gray-500 text-center py-8">No messages yet</p>
-                                    ) : (
-                                        <div className="space-y-3 pb-4">
-                                            {selectedTable.messages.map((message) => (
-                                                <div key={message.id} className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-teal-600">{message.studentName}</span>
-                                                        <span className="text-xs text-gray-400">
-                                                            {message.timestamp.toLocaleTimeString()}
-                                                        </span>
+                                    <div className="space-y-6 py-4">
+                                        {/* Current Participants */}
+                                        <div>
+                                            <Label className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2 block">
+                                                Current Students
+                                            </Label>
+                                            <div className="space-y-1">
+                                                {selectedTable.students.map((student) => (
+                                                    <div key={student.id} className="flex items-center justify-between p-2 bg-teal-50 rounded-md border border-teal-100 group">
+                                                        <div className="flex items-center gap-2">
+                                                            <div
+                                                                className={`w-8 h-8 rounded-full bg-gradient-to-br ${student.color} flex items-center justify-center text-lg shadow-sm`}
+                                                            >
+                                                                {student.avatar}
+                                                            </div>
+                                                            <span className="text-sm font-medium text-gray-800">{student.name}</span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRemoveStudent(student.id)}
+                                                            className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors"
+                                                            title="Remove"
+                                                        >
+                                                            <Minus className="w-4 h-4" />
+                                                        </button>
                                                     </div>
-                                                    <div className="bg-gray-50 p-2 rounded-lg text-sm">
-                                                        {message.text}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                                {selectedTable.students.length === 0 && (
+                                                    <p className="text-xs text-gray-400 italic px-2">No students assigned</p>
+                                                )}
+                                            </div>
                                         </div>
-                                    )}
+
+                                        <div className="border-b border-gray-100 my-2" />
+
+                                        {/* Add Students Section */}
+                                        <div>
+                                            <Label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-3 block">
+                                                Add Students
+                                            </Label>
+                                            <div className="space-y-1">
+                                                {allStudents
+                                                    .filter(s => !selectedTable.students.some(ts => ts.id === s.id))
+                                                    .map((student) => {
+                                                        const otherTable = tables.find(t => t.id !== selectedTable.id && t.students.some(ts => ts.id === student.id));
+
+                                                        return (
+                                                            <div
+                                                                key={student.id}
+                                                                className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer group border border-transparent hover:border-gray-200"
+                                                                onClick={() => handleAssignStudent(student.id, selectedTable.id)}
+                                                            >
+                                                                <div
+                                                                    className={`w-8 h-8 rounded-full bg-gradient-to-br ${student.color} flex items-center justify-center text-sm shadow-sm opacity-70 group-hover:opacity-100`}
+                                                                >
+                                                                    {student.avatar}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-sm font-medium text-gray-700 group-hover:text-gray-900 truncate">{student.name}</div>
+                                                                    {otherTable && (
+                                                                        <div className="text-[10px] text-gray-400 truncate">At {otherTable.name}</div>
+                                                                    )}
+                                                                </div>
+                                                                <PlusCircle className="w-4 h-4 text-teal-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                            </div>
+                                                        );
+                                                    })}
+                                                {allStudents.filter(s => !selectedTable.students.some(ts => ts.id === s.id)).length === 0 && (
+                                                    <p className="text-sm text-gray-400 italic text-center py-2">All students assigned</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </ScrollArea>
                             </div>
 
                             <div className="p-4 border-t bg-gray-50">
+                                <Label className="text-xs text-gray-600 mb-2 block">Discussion Preview</Label>
+                                <div className="h-32 overflow-y-auto space-y-2 mb-2 bg-white p-2 rounded border text-xs text-gray-500">
+                                    {selectedTable.messages.length > 0 ? selectedTable.messages.slice(-3).map(m => (
+                                        <div key={m.id}>
+                                            <span className="font-bold">{m.studentName}:</span> {m.text}
+                                        </div>
+                                    )) : "No recent messages"}
+                                </div>
                                 <div className="flex gap-2">
                                     <Input
-                                        placeholder="Monitor or join discussion..."
+                                        placeholder="Send message..."
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
                                         onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                                        className="text-sm"
+                                        className="text-sm h-8"
                                     />
                                     <Button
                                         size="icon"
                                         onClick={handleSendMessage}
-                                        className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700"
+                                        className="bg-teal-600 hover:bg-teal-700 h-8 w-8"
                                     >
-                                        <Send className="w-4 h-4" />
+                                        <Send className="w-3 h-3" />
                                     </Button>
                                 </div>
                             </div>
@@ -667,41 +732,37 @@ export default function TeacherGroupPage() {
     );
 }
 
+// Update Props Interface
 interface VirtualTableProps {
     table: Table;
     isSelected: boolean;
     onClick: () => void;
-    onAssignStudent: (studentId: string, tableId: string) => void;
-    allStudents: Student[];
-    tables: Table[];
-    assignDialogOpen: boolean;
-    setAssignDialogOpen: (open: boolean) => void;
 }
 
 function VirtualTable({
     table,
     isSelected,
     onClick,
-    onAssignStudent,
-    allStudents,
-    tables,
-    assignDialogOpen,
-    setAssignDialogOpen,
 }: VirtualTableProps) {
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onClick();
+    };
+
     return (
         <div
-            className="absolute group"
+            className="absolute group cursor-pointer"
             style={{
                 left: `${table.position.x}px`,
                 top: `${table.position.y}px`,
                 width: "220px",
                 height: "220px",
             }}
+            onClick={handleClick}
         >
             <div
-                className={`relative cursor-pointer transition-all ${isSelected ? "scale-110 z-20" : "hover:scale-105 z-10"
+                className={`relative transition-all ${isSelected ? "scale-110 z-20" : "hover:scale-105 z-10"
                     }`}
-                onClick={onClick}
             >
                 <div className="relative w-full h-full rounded-full transition-all bg-gradient-to-br from-amber-700 via-amber-600 to-amber-800 shadow-lg">
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -780,57 +841,6 @@ function VirtualTable({
                 </div>
             </div>
 
-            <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Assign Students to {table.name}</DialogTitle>
-                        <DialogDescription>
-                            Click on students to assign them to this table
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <ScrollArea className="h-64">
-                        <div className="space-y-2">
-                            {allStudents.map((student) => {
-                                const isInThisTable = table.students.some((s) => s.id === student.id);
-                                const isInAnotherTable = tables.some(
-                                    (t) =>
-                                        t.id !== table.id &&
-                                        t.students.some((s) => s.id === student.id)
-                                );
-
-                                return (
-                                    <div
-                                        key={student.id}
-                                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${isInThisTable
-                                            ? "bg-teal-100 border border-teal-300"
-                                            : isInAnotherTable
-                                                ? "bg-gray-100 text-gray-500"
-                                                : "hover:bg-gray-50 border border-transparent"
-                                            }`}
-                                        onClick={() => onAssignStudent(student.id, table.id)}
-                                    >
-                                        <div
-                                            className={`w-10 h-10 rounded-full bg-gradient-to-br ${student.color} flex items-center justify-center text-xl shadow-md`}
-                                        >
-                                            {student.avatar}
-                                        </div>
-                                        <span className="flex-1">{student.name}</span>
-
-                                        {isInThisTable && (
-                                            <Badge className="bg-teal-600">At Table</Badge>
-                                        )}
-
-                                        {isInAnotherTable && (
-                                            <Badge variant="secondary">Other Table</Badge>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </ScrollArea>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
