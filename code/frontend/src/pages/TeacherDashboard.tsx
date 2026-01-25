@@ -66,9 +66,15 @@ interface DashboardActivity {
 
 interface DashboardReview {
     id: number;
-    student: string;
-    activity: string;
-    aiScore: number | null;
+    student: {
+        id: number;
+        name: string;
+    };
+    activity: {
+        id: number;
+        activity_id: string;
+        title: string;
+    };
     status: string;
 }
 
@@ -448,11 +454,11 @@ export function TeacherDashboard() {
                                         <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                             <div className="flex items-center gap-3">
                                                 <Avatar>
-                                                    <AvatarFallback>{item.student.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                                                    <AvatarFallback>{item.student?.name?.split(" ").map(n => n[0]).join("") || "??"}</AvatarFallback>
                                                 </Avatar>
                                                 <div>
-                                                    <div>{item.student}</div>
-                                                    <div className="text-sm text-gray-500">{item.activity}</div>
+                                                    <div>{item.student?.name || "Unknown Student"}</div>
+                                                    <div className="text-sm text-gray-500">{item.activity?.title || "Unknown Activity"}</div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
