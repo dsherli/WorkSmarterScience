@@ -15,7 +15,9 @@ import {
     Award,
     Calendar,
     Bot,
-    Loader2
+    Loader2,
+    Users,
+    Sparkles,
 } from "lucide-react";
 
 type Assignment = {
@@ -29,6 +31,16 @@ type Assignment = {
     status: string;
     assigned_at: string | null;
     classroom: { id: number; name: string } | null;
+    has_discussion?: boolean; // Whether AI discussion questions exist
+};
+
+type DiscussionGroup = {
+    assignment_id: number;
+    activity_title: string;
+    classroom_name: string;
+    has_prompts: boolean;
+    prompt_count: number;
+    group_name: string;
 };
 
 type Classroom = {
@@ -75,6 +87,8 @@ export function StudentDashboard() {
     const [joinError, setJoinError] = useState<string | null>(null);
     const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
     const [loadingActivity, setLoadingActivity] = useState<boolean>(true);
+    const [discussions, setDiscussions] = useState<DiscussionGroup[]>([]);
+    const [loadingDiscussions, setLoadingDiscussions] = useState<boolean>(true);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -291,6 +305,60 @@ export function StudentDashboard() {
         fetchRecentActivity();
     }, []);
 
+    // Fetch available discussions for student
+    useEffect(() => {
+        const fetchDiscussions = async () => {
+            setLoadingDiscussions(true);
+            try {
+                const token = localStorage.getItem("access_token");
+                if (!token) {
+                    setDiscussions([]);
+                    return;
+                }
+
+                // For each assignment, check if the student has a group with prompts
+                const discussionList: DiscussionGroup[] = [];
+                
+                for (const assignment of assignments) {
+                    try {
+                        const response = await fetch(`/api/activity-groups/assignments/${assignment.id}/my-group/`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.has_prompts) {
+                                discussionList.push({
+                                    assignment_id: assignment.id,
+                                    activity_title: assignment.activity_title || "Untitled Activity",
+                                    classroom_name: assignment.classroom?.name || "Unknown Class",
+                                    has_prompts: true,
+                                    prompt_count: data.prompts?.length || 0,
+                                    group_name: data.group?.label || "Your Group",
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        // Silently skip assignments without groups
+                    }
+                }
+                
+                setDiscussions(discussionList);
+            } catch (error) {
+                console.error("Failed to load discussions", error);
+                setDiscussions([]);
+            } finally {
+                setLoadingDiscussions(false);
+            }
+        };
+
+        if (!loadingAssignments && assignments.length > 0) {
+            fetchDiscussions();
+        } else if (!loadingAssignments) {
+            setLoadingDiscussions(false);
+        }
+    }, [assignments, loadingAssignments]);
+
     // Helper function to format time ago
     const formatTimeAgo = (isoString: string): string => {
         const date = new Date(isoString);
@@ -479,6 +547,13 @@ export function StudentDashboard() {
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="classes">My Classes</TabsTrigger>
                     <TabsTrigger value="assignments">Assignments</TabsTrigger>
+                    <TabsTrigger value="discussions" className="flex items-center gap-1">
+                        <MessageSquare className="w-4 h-4" />
+                        Discussions
+                        {discussions.length > 0 && (
+                            <Badge className="ml-1 bg-purple-500 text-white text-xs px-1.5 py-0">{discussions.length}</Badge>
+                        )}
+                    </TabsTrigger>
                     <TabsTrigger value="activity">Activity</TabsTrigger>
                 </TabsList>
 
@@ -684,47 +759,64 @@ export function StudentDashboard() {
                         )}
                         {!loadingAssignments && !assignmentsError && assignments.length > 0 && (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {assignments.map((assignment) => (
-                                    <Card
-                                        key={assignment.id || assignment.activity_id}
-                                        className="p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <h3 className="text-lg">
-                                                    {assignment.activity_title || "Untitled Activity"}
-                                                </h3>
-                                                <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-600">
-                                                    <Badge variant="outline">ID {assignment.activity_id}</Badge>
-                                                    {assignment.pe && (
-                                                        <Badge variant="secondary">PE {assignment.pe}</Badge>
-                                                    )}
-                                                    {assignment.lp && (
-                                                        <Badge variant="outline">LP {assignment.lp}</Badge>
-                                                    )}
+                                {assignments.map((assignment) => {
+                                    const hasDiscussion = discussions.some(d => d.assignment_id === assignment.id);
+                                    return (
+                                        <Card
+                                            key={assignment.id || assignment.activity_id}
+                                            className={`p-4 flex flex-col gap-3 hover:shadow-md transition-shadow ${hasDiscussion ? 'border-l-4 border-l-purple-400' : ''}`}
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <h3 className="text-lg">
+                                                        {assignment.activity_title || "Untitled Activity"}
+                                                    </h3>
+                                                    <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-600">
+                                                        <Badge variant="outline">ID {assignment.activity_id}</Badge>
+                                                        {assignment.pe && (
+                                                            <Badge variant="secondary">PE {assignment.pe}</Badge>
+                                                        )}
+                                                        {assignment.lp && (
+                                                            <Badge variant="outline">LP {assignment.lp}</Badge>
+                                                        )}
+                                                        {hasDiscussion && (
+                                                            <Badge className="bg-purple-100 text-purple-700 border-purple-200">
+                                                                <MessageSquare className="w-3 h-3 mr-1" />
+                                                                Discussion
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 mt-2">
+                                                        {assignment.classroom?.name && (
+                                                            <span>{assignment.classroom.name} • </span>
+                                                        )}
+                                                        {formatDueDate(assignment.due_at)}
+                                                    </p>
                                                 </div>
-                                                <p className="text-xs text-gray-500 mt-2">
-                                                    {assignment.classroom?.name && (
-                                                        <span>{assignment.classroom.name} • </span>
-                                                    )}
-                                                    {formatDueDate(assignment.due_at)}
-                                                </p>
                                             </div>
-                                        </div>
-                                        {assignment.lp_text && (
-                                            <p className="text-sm text-gray-600 line-clamp-3">
-                                                {assignment.lp_text}
-                                            </p>
-                                        )}
-                                        <div className="flex justify-end mt-auto">
-                                            <Button size="sm" asChild>
-                                                <Link to={`/assessment/${assignment.classroom?.id}/${assignment.activity_id}`}>
-                                                    Start Activity
-                                                </Link>
-                                            </Button>
-                                        </div>
-                                    </Card>
-                                ))}
+                                            {assignment.lp_text && (
+                                                <p className="text-sm text-gray-600 line-clamp-3">
+                                                    {assignment.lp_text}
+                                                </p>
+                                            )}
+                                            <div className="flex gap-2 mt-auto">
+                                                {hasDiscussion && (
+                                                    <Button size="sm" variant="outline" asChild className="flex-1 border-purple-300 text-purple-700 hover:bg-purple-50">
+                                                        <Link to={`/dashboard/group-discussion/${assignment.id}`}>
+                                                            <MessageSquare className="w-4 h-4 mr-1" />
+                                                            Discussion
+                                                        </Link>
+                                                    </Button>
+                                                )}
+                                                <Button size="sm" asChild className={hasDiscussion ? 'flex-1' : 'w-full'}>
+                                                    <Link to={`/assessment/${assignment.classroom?.id}/${assignment.activity_id}`}>
+                                                        Start Activity
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        </Card>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -757,6 +849,86 @@ export function StudentDashboard() {
                             })}
                         </div>
                     </Card>
+                </TabsContent>
+
+                {/* Discussions */}
+                <TabsContent value="discussions">
+                    <div className="space-y-4">
+                        <Card className="p-6 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center">
+                                    <Sparkles className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl">Group Discussions</h2>
+                                    <p className="text-sm text-gray-600">
+                                        Collaborate with your group on AI-generated discussion questions
+                                    </p>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {loadingDiscussions && (
+                            <Card className="p-6">
+                                <div className="flex items-center gap-3 text-gray-500">
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    <span>Loading available discussions...</span>
+                                </div>
+                            </Card>
+                        )}
+
+                        {!loadingDiscussions && discussions.length === 0 && (
+                            <Card className="p-6">
+                                <div className="flex items-center gap-3 text-gray-600">
+                                    <MessageSquare className="w-5 h-5" />
+                                    <div>
+                                        <p className="font-medium">No discussions available yet</p>
+                                        <p className="text-sm">
+                                            Your teacher will release discussion questions after reviewing submissions.
+                                        </p>
+                                    </div>
+                                </div>
+                            </Card>
+                        )}
+
+                        {!loadingDiscussions && discussions.length > 0 && (
+                            <div className="grid gap-4 md:grid-cols-2">
+                                {discussions.map((discussion) => (
+                                    <Card
+                                        key={discussion.assignment_id}
+                                        className="p-5 hover:shadow-lg transition-shadow border-l-4 border-l-purple-500"
+                                    >
+                                        <div className="flex items-start justify-between gap-3 mb-3">
+                                            <div>
+                                                <h3 className="text-lg font-medium">
+                                                    {discussion.activity_title}
+                                                </h3>
+                                                <p className="text-sm text-gray-500">
+                                                    {discussion.classroom_name} • {discussion.group_name}
+                                                </p>
+                                            </div>
+                                            <Badge className="bg-purple-100 text-purple-700 border-purple-200">
+                                                <MessageSquare className="w-3 h-3 mr-1" />
+                                                {discussion.prompt_count} questions
+                                            </Badge>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+                                            <Users className="w-4 h-4" />
+                                            <span>Ready for group discussion</span>
+                                        </div>
+
+                                        <Button asChild className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700">
+                                            <Link to={`/dashboard/group-discussion/${discussion.assignment_id}`}>
+                                                <MessageSquare className="w-4 h-4 mr-2" />
+                                                Join Discussion
+                                            </Link>
+                                        </Button>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>

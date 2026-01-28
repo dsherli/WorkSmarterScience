@@ -1,5 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
-import { groupsApi } from "../api/groups";
+import { groupsApi, groupPromptsApi, type GroupInfo, type GenerateAllQuestionsResult } from "../api/groups";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -13,6 +13,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from "../components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "../components/ui/dialog";
+import { toast } from "sonner";
 
 import {
     Send,
@@ -27,6 +36,11 @@ import {
     RotateCcw,
     Minus,
     Plus,
+    Sparkles,
+    Loader2,
+    CheckCircle2,
+    MessageCircle,
+    Brain,
 } from "lucide-react";
 
 // fetchWithAuth helper for fetching classrooms
@@ -83,6 +97,16 @@ export default function TeacherGroupPage() {
     // New API State
     const [classrooms, setClassrooms] = useState<any[]>([]);
     const [allStudents, setAllStudents] = useState<Student[]>([]);
+
+    // AI Questions Dialog State
+    const [aiDialogOpen, setAiDialogOpen] = useState(false);
+    const [classroomAssignments, setClassroomAssignments] = useState<any[]>([]);
+    const [selectedAssignment, setSelectedAssignment] = useState<string>("");
+    const [aiGroups, setAiGroups] = useState<GroupInfo[]>([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [generating, setGenerating] = useState(false);
+    const [numQuestions, setNumQuestions] = useState<string>("4");
+    const [generateResults, setGenerateResults] = useState<GenerateAllQuestionsResult | null>(null);
 
     // Fetch classrooms on mount
     useEffect(() => {
@@ -196,6 +220,69 @@ export default function TeacherGroupPage() {
         setZoom(1);
         setPan({ x: 0, y: 0 });
     }, [selectedClassroom]);
+
+    // Fetch assignments for selected classroom (for AI dialog)
+    useEffect(() => {
+        if (!selectedClassroom) return;
+        const token = localStorage.getItem("access_token");
+        fetch(`/api/classrooms/${selectedClassroom}/activities/`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setClassroomAssignments(data);
+                    setSelectedAssignment("");
+                    setAiGroups([]);
+                    setGenerateResults(null);
+                }
+            })
+            .catch(console.error);
+    }, [selectedClassroom]);
+
+    // Fetch groups when assignment is selected
+    useEffect(() => {
+        if (!selectedAssignment) {
+            setAiGroups([]);
+            return;
+        }
+        setAiLoading(true);
+        groupPromptsApi.getTeacherGroups(selectedAssignment)
+            .then(data => setAiGroups(data))
+            .catch(err => {
+                console.error(err);
+                toast.error("Failed to load groups");
+            })
+            .finally(() => setAiLoading(false));
+    }, [selectedAssignment]);
+
+    // Handle generating questions for all groups
+    const handleGenerateAllQuestions = async () => {
+        if (!selectedAssignment) return;
+        setGenerating(true);
+        setGenerateResults(null);
+        try {
+            const result = await groupPromptsApi.generateAllGroupQuestions(
+                selectedAssignment,
+                parseInt(numQuestions)
+            );
+            setGenerateResults(result);
+            if (result.successful > 0) {
+                toast.success(`Generated questions for ${result.successful} group(s)`);
+                // Refresh groups
+                const data = await groupPromptsApi.getTeacherGroups(selectedAssignment);
+                setAiGroups(data);
+            }
+            if (result.failed > 0) {
+                toast.warning(`${result.failed} group(s) failed - check if students have submitted`);
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to generate questions");
+        } finally {
+            setGenerating(false);
+        }
+    };
 
     const generateClassroomLayout = (count: number): Table[] => {
         const tables: Table[] = [];
@@ -459,6 +546,144 @@ export default function TeacherGroupPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button
+                                    size="sm"
+                                    className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 h-8"
+                                >
+                                    <Sparkles className="w-4 h-4 mr-1" />
+                                    AI Questions
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle className="flex items-center gap-2">
+                                        <Sparkles className="w-5 h-5 text-purple-600" />
+                                        Generate AI Discussion Questions
+                                    </DialogTitle>
+                                    <DialogDescription>
+                                        Generate follow-up questions based on student submissions for group discussions.
+                                    </DialogDescription>
+                                </DialogHeader>
+
+                                <div className="space-y-4 mt-4">
+                                    {/* Assignment Selection */}
+                                    <div className="space-y-2">
+                                        <Label>Select Assignment</Label>
+                                        <Select value={selectedAssignment} onValueChange={setSelectedAssignment}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Choose an assignment..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {classroomAssignments.map((a) => (
+                                                    <SelectItem key={a.id} value={a.id.toString()}>
+                                                        {a.activity_title || a.activity_id}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {selectedAssignment && (
+                                        <>
+                                            {/* Number of Questions */}
+                                            <div className="flex items-center gap-4">
+                                                <Label>Questions per group:</Label>
+                                                <Select value={numQuestions} onValueChange={setNumQuestions}>
+                                                    <SelectTrigger className="w-20">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {[2, 3, 4, 5, 6].map(n => (
+                                                            <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Button
+                                                    onClick={handleGenerateAllQuestions}
+                                                    disabled={generating || aiLoading || aiGroups.length === 0}
+                                                    className="bg-gradient-to-r from-purple-600 to-indigo-600"
+                                                >
+                                                    {generating ? (
+                                                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>
+                                                    ) : (
+                                                        <><Sparkles className="w-4 h-4 mr-2" />Generate for All Groups</>
+                                                    )}
+                                                </Button>
+                                            </div>
+
+                                            {/* Groups List */}
+                                            {aiLoading ? (
+                                                <div className="flex items-center justify-center py-8">
+                                                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                                                </div>
+                                            ) : aiGroups.length === 0 ? (
+                                                <Card className="p-4 bg-amber-50 border-amber-200">
+                                                    <p className="text-amber-700 text-sm">
+                                                        No groups found. Make sure students are assigned to tables.
+                                                    </p>
+                                                </Card>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <Label className="text-sm text-gray-600">Groups ({aiGroups.length})</Label>
+                                                    {aiGroups.map((group) => {
+                                                        const hasPrompts = group.ai_runs && group.ai_runs.length > 0;
+                                                        const latestRun = hasPrompts ? group.ai_runs[0] : null;
+                                                        return (
+                                                            <Card key={group.id} className="p-3">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Users className="w-4 h-4 text-gray-500" />
+                                                                        <span className="font-medium">{group.label}</span>
+                                                                    </div>
+                                                                    {hasPrompts ? (
+                                                                        <Badge className="bg-green-100 text-green-700 border-green-200">
+                                                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                            {latestRun?.prompts.length || 0} questions ready
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        <Badge variant="outline" className="text-gray-500">
+                                                                            No questions yet
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                                {latestRun && (
+                                                                    <div className="mt-2 pl-6 text-sm text-gray-600">
+                                                                        <p className="line-clamp-2 italic">
+                                                                            "{latestRun.synthesized_summary_text.slice(0, 150)}..."
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                            </Card>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* Results Summary */}
+                                            {generateResults && (
+                                                <Card className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <CheckCircle2 className="w-5 h-5 text-green-600" />
+                                                            <span className="text-green-700">{generateResults.successful} successful</span>
+                                                        </div>
+                                                        {generateResults.failed > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                                <X className="w-5 h-5 text-red-600" />
+                                                                <span className="text-red-700">{generateResults.failed} failed</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </Card>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
                         <Badge variant="outline" className="text-teal-600 border-teal-300">
                             {tables.length} tables
                         </Badge>

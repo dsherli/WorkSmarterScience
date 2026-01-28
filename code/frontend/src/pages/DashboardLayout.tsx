@@ -15,7 +15,8 @@ import {
     Bell,
     Menu,
     X,
-    Activity
+    Activity,
+    Sparkles,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import CoursesDrawer from "../components/CoursesDrawer";
