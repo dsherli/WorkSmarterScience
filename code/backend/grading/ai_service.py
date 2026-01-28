@@ -323,6 +323,148 @@ Be encouraging while maintaining accuracy."""
             "tokens_used": result["tokens_used"],
         }
 
+    def generate_group_discussion_questions(
+        self,
+        activity_metadata: dict,
+        rubric_criteria: list[dict],
+        student_responses: list[dict],
+        num_questions: int = 4,
+    ) -> dict:
+        """
+        Generate AI-powered follow-up discussion questions for a student group
+        based on their collective responses to an assessment.
+
+        Args:
+            activity_metadata: Dict with activity info (title, task, questions, etc.)
+            rubric_criteria: List of rubric criteria used for grading
+            student_responses: List of dicts with student answers and feedback
+            num_questions: Number of discussion questions to generate
+
+        Returns:
+            dict with 'questions' (list of question dicts), 'summary', 'model', 'tokens_used'
+        """
+        # Build the rubric context
+        rubric_text = ""
+        if rubric_criteria:
+            rubric_text = "GRADING RUBRIC:\n"
+            for criterion in rubric_criteria:
+                rubric_text += f"- {criterion.get('name', 'Criterion')}: {criterion.get('description', '')}\n"
+                if 'levels' in criterion:
+                    for level in criterion['levels']:
+                        rubric_text += f"  • {level.get('name', 'Level')}: {level.get('description', '')}\n"
+
+        # Build student responses context
+        responses_text = "STUDENT RESPONSES FROM THE GROUP:\n\n"
+        for i, response in enumerate(student_responses, 1):
+            responses_text += f"Student {i}:\n"
+            for answer in response.get('answers', []):
+                responses_text += f"  Question: {answer.get('question_text', 'N/A')}\n"
+                responses_text += f"  Answer: {answer.get('student_answer', 'No answer provided')}\n"
+                if answer.get('ai_feedback'):
+                    responses_text += f"  AI Feedback: {answer.get('ai_feedback')}\n"
+                responses_text += "\n"
+
+        system_prompt = """You are an expert K-12 science educator specializing in facilitating meaningful group discussions.
+Your task is to analyze student responses to an assessment and generate thoughtful follow-up discussion questions
+that will help students:
+1. Deepen their understanding of concepts they may have misunderstood
+2. Explore connections between ideas they demonstrated understanding of
+3. Apply their learning to new contexts
+4. Reflect on their thinking process
+
+Generate questions that are:
+- Open-ended and promote discussion (not yes/no questions)
+- Appropriate for the grade level and topic
+- Building on patterns you observe in the group's responses
+- Encouraging collaborative sense-making
+
+You MUST respond with a valid JSON object in this exact format:
+{
+  "summary": "Brief synthesis of common themes, strengths, and misconceptions observed in the group's responses",
+  "questions": [
+    {
+      "prompt_order": 1,
+      "prompt_text": "The actual discussion question text",
+      "prompt_type": "follow_up",
+      "rationale": "Why this question was chosen based on student responses"
+    }
+  ]
+}
+
+Valid prompt_type values are: "follow_up", "reflection", "extension", "check_in"
+- follow_up: Addresses gaps or misconceptions
+- reflection: Asks students to think about their thinking
+- extension: Pushes understanding to new contexts
+- check_in: Ensures baseline understanding before moving on"""
+
+        user_message = f"""ASSESSMENT INFORMATION:
+Title: {activity_metadata.get('title', 'Science Activity')}
+Task Description: {activity_metadata.get('task', 'Complete the assessment')}
+
+ASSESSMENT QUESTIONS:
+{chr(10).join(f"Q{i+1}: {q}" for i, q in enumerate(activity_metadata.get('questions', [])))}
+
+{rubric_text}
+
+{responses_text}
+
+Based on the above assessment and student responses, generate exactly {num_questions} discussion questions
+that will help this group of students deepen their understanding through collaborative discussion.
+
+Include a mix of question types:
+- At least 1 follow_up question addressing common gaps
+- At least 1 reflection question  
+- At least 1 extension question
+- Optionally a check_in question if foundational concepts seem unclear"""
+
+        result = self.chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.7,
+            max_tokens=2000,
+        )
+
+        # Parse the response
+        try:
+            parsed = json.loads(result["content"])
+        except json.JSONDecodeError:
+            # Try to extract JSON from response
+            content = result["content"]
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start >= 0 and end > start:
+                try:
+                    parsed = json.loads(content[start:end])
+                except json.JSONDecodeError:
+                    parsed = {
+                        "summary": "Unable to parse AI response",
+                        "questions": [{
+                            "prompt_order": 1,
+                            "prompt_text": "What did you learn from this activity? Discuss with your group.",
+                            "prompt_type": "reflection",
+                            "rationale": "Fallback question due to parsing error"
+                        }]
+                    }
+            else:
+                parsed = {
+                    "summary": "Unable to parse AI response",
+                    "questions": [{
+                        "prompt_order": 1,
+                        "prompt_text": "What did you learn from this activity? Discuss with your group.",
+                        "prompt_type": "reflection",
+                        "rationale": "Fallback question due to parsing error"
+                    }]
+                }
+
+        return {
+            "summary": parsed.get("summary", ""),
+            "questions": parsed.get("questions", []),
+            "model": result["model"],
+            "tokens_used": result["tokens_used"],
+        }
+
 
 # Singleton instance
 _ai_service_instance: Optional[AIService] = None

@@ -9,6 +9,8 @@ import ActivityLibrary from "./pages/ActivityLibrary";
 import ClassroomPage from "./pages/ClassroomPage";
 import ActivityDetailPage from "./pages/ActivityDetailPage";
 import TeacherGroupPage from "./pages/TeacherGroupPage";
+import StudentGroupDiscussionPage from "./pages/StudentGroupDiscussionPage";
+import StudentGroupDiscussionDemo from "./pages/StudentGroupDiscussionDemo";
 import Assessment1 from "./pages/Assessment1";
 import { Toaster } from "./components/ui/sonner";
 
@@ -39,6 +41,8 @@ export default function App() {
                         <Route path="ai-assistant" element={<div className="p-8">AI Assistant coming soon...</div>} />
                         <Route path="ai-insights" element={<div className="p-8">AI Insights coming soon...</div>} />
                         <Route path="students" element={<div className="p-8">Student Management coming soon...</div>} />
+                        <Route path="group-discussion/:assignmentId" element={<StudentGroupDiscussionPage />} />
+                        <Route path="group-discussion-demo" element={<StudentGroupDiscussionDemo />} />
                     </Route>
                     <Route path="/assessment/:classroom_id/:activity_id" element={<Assessment1 />} />
                 </Route>

@@ -29,6 +29,102 @@ export interface Table {
     messages: any[];
 }
 
+// Group AI Prompts API
+export interface GroupAIPrompt {
+    id: number;
+    prompt_order: number;
+    prompt_text: string;
+    prompt_type: 'follow_up' | 'reflection' | 'extension' | 'check_in';
+    created_at: string;
+}
+
+export interface GroupAIRun {
+    id: number;
+    activity_group: number;
+    run_reason: string;
+    synthesized_summary_text: string;
+    model_name: string;
+    created_at: string;
+    prompts: GroupAIPrompt[];
+}
+
+export interface GroupInfo {
+    id: number;
+    label: string;
+    archived_at: string | null;
+    ai_runs: GroupAIRun[];
+}
+
+export interface GroupMember {
+    id: number;
+    username: string;
+    name: string;
+    is_me: boolean;
+}
+
+export interface StudentGroupInfo {
+    group: {
+        id: number;
+        label: string;
+    };
+    members: GroupMember[];
+    has_prompts: boolean;
+    summary: string;
+    prompts: GroupAIPrompt[];
+    last_updated: string | null;
+}
+
+export interface GenerateQuestionsResult {
+    id: number;
+    activity_group: number;
+    run_reason: string;
+    synthesized_summary_text: string;
+    model_name: string;
+    created_at: string;
+    prompts: GroupAIPrompt[];
+}
+
+export interface GenerateAllQuestionsResult {
+    total_groups: number;
+    successful: number;
+    failed: number;
+    results: Array<{
+        group_id: number;
+        group_label: string;
+        success: boolean;
+        data?: GenerateQuestionsResult;
+        error?: string;
+    }>;
+}
+
+export const groupPromptsApi = {
+    // Get current prompts for student's group in an assignment
+    getStudentPrompts: (assignmentId: string | number): Promise<GroupAIPrompt[]> =>
+        fetchWithAuth(`/activity-groups/assignments/${assignmentId}/prompts/`),
+    
+    // Get student's group info including members and prompts
+    getStudentGroupInfo: (assignmentId: string | number): Promise<StudentGroupInfo> =>
+        fetchWithAuth(`/activity-groups/assignments/${assignmentId}/my-group/`),
+    
+    // Get all groups with prompts for teacher view
+    getTeacherGroups: (assignmentId: string | number): Promise<GroupInfo[]> =>
+        fetchWithAuth(`/activity-groups/assignments/${assignmentId}/groups/`),
+    
+    // Generate discussion questions for a specific group (teacher only)
+    generateGroupQuestions: (groupId: string | number, numQuestions: number = 4): Promise<GenerateQuestionsResult> =>
+        fetchWithAuth(`/activity-groups/groups/${groupId}/generate-questions/`, {
+            method: "POST",
+            body: JSON.stringify({ num_questions: numQuestions }),
+        }),
+    
+    // Generate discussion questions for all groups in an assignment (teacher only)
+    generateAllGroupQuestions: (assignmentId: string | number, numQuestions: number = 4): Promise<GenerateAllQuestionsResult> =>
+        fetchWithAuth(`/activity-groups/assignments/${assignmentId}/generate-all/`, {
+            method: "POST",
+            body: JSON.stringify({ num_questions: numQuestions }),
+        }),
+};
+
 export const groupsApi = {
     // Get all tables for a classroom
     getTables: (classroomId: string | number) =>

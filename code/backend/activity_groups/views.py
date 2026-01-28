@@ -1,14 +1,29 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from django.db.models import Prefetch
+from django.shortcuts import get_object_or_404
+import logging
+
 from .models import (
     ActivityGroup,
+    ActivityGroupSet,
+    ActivityGroupMembership,
     GroupAIRun,
     GroupAIPrompt,
 )
 from .serializers import (
     GroupAIPromptSerializer,
     GroupWithPromptsSerializer,
+    GroupAIRunSerializer,
 )
+from grading.ai_service import get_ai_service
+from grading.models import Rubric, RubricCriterion
+from activities.models import ScienceActivity, ScienceActivitySubmission, ActivityAnswer
+from classrooms.models import ClassroomActivityAssignment
+
+logger = logging.getLogger(__name__)
 
 
 class StudentCurrentPromptsView(generics.ListAPIView):
@@ -54,3 +69,340 @@ class TeacherGroupsWithPromptsView(generics.ListAPIView):
                 )
             )
         )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def generate_group_questions(request, group_id):
+    """
+    Generate AI-powered discussion questions for a specific activity group.
+    
+    This endpoint:
+    1. Fetches all student responses in the group for the assigned activity
+    2. Retrieves activity metadata and rubric
+    3. Calls the AI to generate follow-up discussion questions
+    4. Stores the questions in GroupAIPrompt model
+    
+    Request body (optional):
+    {
+        "num_questions": 4  # Number of questions to generate (default: 4)
+    }
+    
+    Returns:
+        GroupAIRun with generated prompts
+    """
+    # Get the activity group
+    group = get_object_or_404(
+        ActivityGroup.objects.select_related("group_set__assignment__classroom_activity"),
+        pk=group_id
+    )
+    
+    # Verify the user is authorized (teacher of the classroom)
+    assignment = group.group_set.assignment
+    classroom_activity = assignment.classroom_activity
+    classroom = classroom_activity.classroom
+    
+    if classroom.created_by != request.user:
+        return Response(
+            {"error": "You do not have permission to generate questions for this group"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Get AI service
+    ai_service = get_ai_service()
+    if not ai_service.is_configured():
+        return Response(
+            {"error": "AI service not configured. Please set up API keys."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    
+    # Get the activity
+    activity_id = classroom_activity.activity_id
+    try:
+        activity = ScienceActivity.objects.get(activity_id=activity_id)
+    except ScienceActivity.DoesNotExist:
+        return Response(
+            {"error": f"Activity {activity_id} not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Build activity metadata
+    activity_metadata = {
+        "title": activity.activity_title or activity.activity_id,
+        "task": activity.activity_task or "",
+        "questions": [
+            q for q in [
+                activity.question_1,
+                activity.question_2,
+                activity.question_3,
+                activity.question_4,
+                activity.question_5,
+            ] if q and q.strip()
+        ],
+        "pe": activity.pe,
+        "lp": activity.lp,
+        "lp_text": activity.lp_text,
+    }
+    
+    # Get rubric criteria if exists
+    rubric_criteria = []
+    try:
+        from grading.models import ActivityRubricMap
+        rubric_map = ActivityRubricMap.objects.filter(
+            activity_id=activity.id
+        ).select_related("rubric").first()
+        
+        if rubric_map and rubric_map.rubric:
+            criteria = RubricCriterion.objects.filter(rubric=rubric_map.rubric)
+            rubric_criteria = [
+                {
+                    "name": c.name,
+                    "description": c.description,
+                    "max_points": c.max_points,
+                    "weight": c.weight,
+                }
+                for c in criteria
+            ]
+    except Exception as e:
+        logger.warning(f"Could not fetch rubric: {e}")
+    
+    # Get all group members
+    member_ids = list(
+        ActivityGroupMembership.objects.filter(
+            activity_group=group
+        ).values_list("user_id", flat=True)
+    )
+    
+    if not member_ids:
+        return Response(
+            {"error": "No students in this group"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get student submissions for this activity
+    submissions = ScienceActivitySubmission.objects.filter(
+        activity=activity,
+        student_id__in=member_ids
+    ).prefetch_related("answers")
+    
+    # Build student responses data
+    student_responses = []
+    response_ids = []
+    
+    for submission in submissions:
+        answers = list(submission.answers.all())
+        if answers:
+            response_ids.append(submission.id)
+            student_responses.append({
+                "student_id": submission.student_id,
+                "answers": [
+                    {
+                        "question_number": a.question_number,
+                        "question_text": a.question_text,
+                        "student_answer": a.student_answer or "",
+                        "ai_feedback": a.ai_feedback or "",
+                    }
+                    for a in answers
+                ]
+            })
+    
+    if not student_responses:
+        return Response(
+            {"error": "No student submissions found for this group. Students need to complete the assessment first."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get number of questions to generate
+    num_questions = request.data.get("num_questions", 4)
+    
+    try:
+        # Call AI service to generate questions
+        result = ai_service.generate_group_discussion_questions(
+            activity_metadata=activity_metadata,
+            rubric_criteria=rubric_criteria,
+            student_responses=student_responses,
+            num_questions=num_questions,
+        )
+        
+        # Create GroupAIRun record
+        ai_run = GroupAIRun.objects.create(
+            activity_group=group,
+            run_reason=GroupAIRun.RunReason.FOLLOW_UP_GENERATION,
+            input_response_ids=response_ids,
+            synthesized_summary_text=result.get("summary", ""),
+            model_name=result.get("model", "unknown"),
+            model_params={"tokens_used": result.get("tokens_used"), "num_questions": num_questions},
+        )
+        
+        # Create GroupAIPrompt records
+        for question in result.get("questions", []):
+            GroupAIPrompt.objects.create(
+                group_ai_run=ai_run,
+                prompt_order=question.get("prompt_order", 1),
+                prompt_text=question.get("prompt_text", ""),
+                prompt_type=question.get("prompt_type", "follow_up"),
+            )
+        
+        # Return the created run with prompts
+        serializer = GroupAIRunSerializer(ai_run)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        logger.error(f"Error generating discussion questions: {e}")
+        return Response(
+            {"error": f"Failed to generate questions: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def generate_all_group_questions(request, assignment_id):
+    """
+    Generate AI-powered discussion questions for ALL groups in an assignment.
+    
+    This is a batch operation for teachers to generate questions for all groups at once.
+    
+    Request body (optional):
+    {
+        "num_questions": 4  # Number of questions to generate per group (default: 4)
+    }
+    
+    Returns:
+        List of results for each group
+    """
+    # Get the assignment
+    assignment = get_object_or_404(
+        ClassroomActivityAssignment.objects.select_related("classroom_activity__classroom"),
+        pk=assignment_id
+    )
+    
+    # Verify teacher authorization
+    classroom = assignment.classroom_activity.classroom
+    if classroom.created_by != request.user:
+        return Response(
+            {"error": "You do not have permission to generate questions for this assignment"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Get or create the group set for this assignment
+    try:
+        group_set = ActivityGroupSet.objects.get(assignment=assignment)
+    except ActivityGroupSet.DoesNotExist:
+        return Response(
+            {"error": "No groups have been created for this assignment"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Get all groups
+    groups = ActivityGroup.objects.filter(group_set=group_set, archived_at__isnull=True)
+    
+    if not groups.exists():
+        return Response(
+            {"error": "No active groups found for this assignment"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    results = []
+    num_questions = request.data.get("num_questions", 4)
+    
+    for group in groups:
+        # Make internal request to generate questions for each group
+        try:
+            # Simulate the request for each group
+            from django.test import RequestFactory
+            factory = RequestFactory()
+            fake_request = factory.post(f"/api/activity-groups/groups/{group.id}/generate-questions/")
+            fake_request.user = request.user
+            fake_request.data = {"num_questions": num_questions}
+            
+            response = generate_group_questions(fake_request, group.id)
+            results.append({
+                "group_id": group.id,
+                "group_label": group.label,
+                "success": response.status_code == 201,
+                "data": response.data if response.status_code == 201 else None,
+                "error": response.data.get("error") if response.status_code != 201 else None,
+            })
+        except Exception as e:
+            results.append({
+                "group_id": group.id,
+                "group_label": group.label,
+                "success": False,
+                "error": str(e),
+            })
+    
+    successful = sum(1 for r in results if r["success"])
+    return Response({
+        "total_groups": len(results),
+        "successful": successful,
+        "failed": len(results) - successful,
+        "results": results,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_student_group_info(request, assignment_id):
+    """
+    Get the current student's group info and discussion prompts for an assignment.
+    
+    Returns group details, members, and AI-generated prompts.
+    """
+    user = request.user
+    
+    # Find the student's group for this assignment
+    membership = ActivityGroupMembership.objects.filter(
+        group_set__assignment_id=assignment_id,
+        user=user
+    ).select_related(
+        "activity_group",
+        "group_set"
+    ).first()
+    
+    if not membership:
+        return Response(
+            {"error": "You are not assigned to a group for this activity"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    group = membership.activity_group
+    
+    # Get group members
+    members = ActivityGroupMembership.objects.filter(
+        activity_group=group
+    ).select_related("user")
+    
+    member_list = [
+        {
+            "id": m.user.id,
+            "username": m.user.username,
+            "name": f"{m.user.first_name} {m.user.last_name}".strip() or m.user.username,
+            "is_me": m.user.id == user.id,
+        }
+        for m in members
+    ]
+    
+    # Get latest AI run with prompts
+    latest_run = group.ai_runs.order_by("-created_at").first()
+    prompts = []
+    summary = ""
+    
+    if latest_run:
+        prompts = GroupAIPromptSerializer(
+            latest_run.prompts.order_by("prompt_order"),
+            many=True
+        ).data
+        summary = latest_run.synthesized_summary_text
+    
+    return Response({
+        "group": {
+            "id": group.id,
+            "label": group.label,
+        },
+        "members": member_list,
+        "has_prompts": len(prompts) > 0,
+        "summary": summary,
+        "prompts": prompts,
+        "last_updated": latest_run.created_at if latest_run else None,
+    })
