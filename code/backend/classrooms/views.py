@@ -16,6 +16,7 @@ from .models import (
     ClassroomActivity,
     ClassroomActivityAssignment,
     ClassroomTable,
+    TableMessage,
     Announcement,
     AnnouncementAttachment,
 )

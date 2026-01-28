@@ -11,16 +11,16 @@ from .models import (
 
 @admin.register(ActivityGroupSet)
 class ActivityGroupSetAdmin(admin.ModelAdmin):
-    list_display = ("id", "assignment", "status", "created_by", "created_at")
+    list_display = ("id", "classroom_activity", "status", "created_by", "created_at")
     list_filter = ("status", "created_at")
-    list_select_related = ("assignment", "created_by")
+    list_select_related = ("classroom_activity", "created_by")
 
 
 @admin.register(ActivityGroup)
 class ActivityGroupAdmin(admin.ModelAdmin):
     list_display = ("id", "group_set", "label", "archived_at", "created_at")
     list_filter = ("archived_at",)
-    search_fields = ("label", "group_set__assignment__id")
+    search_fields = ("label", "group_set__classroom_activity__id")
     list_select_related = ("group_set",)
 
 

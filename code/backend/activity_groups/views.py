@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 import logging
 
 from .models import (
@@ -21,9 +22,67 @@ from .serializers import (
 from grading.ai_service import get_ai_service
 from grading.models import Rubric, RubricCriterion
 from activities.models import ScienceActivity, ScienceActivitySubmission, ActivityAnswer
-from classrooms.models import ClassroomActivityAssignment
+from classrooms.models import ClassroomActivity, ClassroomTable, Enrollment
 
 logger = logging.getLogger(__name__)
+
+
+def create_groups_from_tables(classroom_activity, user):
+    """
+    Create ActivityGroupSet and ActivityGroups based on ClassroomTable assignments.
+    
+    This function syncs the ActivityGroup structure with the ClassroomTable structure,
+    creating groups for each table that has students assigned to it.
+    
+    Args:
+        classroom_activity: ClassroomActivity instance (the classroom-level activity assignment)
+        user: The user creating the groups (typically the teacher)
+    
+    Returns:
+        tuple: (group_set, created_count) - the group set and number of groups created
+    """
+    classroom = classroom_activity.classroom
+    
+    # Get or create the group set
+    group_set, set_created = ActivityGroupSet.objects.get_or_create(
+        classroom_activity=classroom_activity,
+        defaults={"created_by": user}
+    )
+    
+    # Get all tables in this classroom that have students assigned
+    tables_with_students = ClassroomTable.objects.filter(
+        classroom=classroom,
+        students__isnull=False  # Has enrollments assigned
+    ).distinct().prefetch_related("students__student")
+    
+    created_count = 0
+    
+    with transaction.atomic():
+        for table in tables_with_students:
+            # Get students assigned to this table
+            enrollments = Enrollment.objects.filter(assigned_table=table)
+            
+            if not enrollments.exists():
+                continue
+            
+            # Create or get the activity group for this table
+            group, group_created = ActivityGroup.objects.get_or_create(
+                group_set=group_set,
+                label=table.name,
+            )
+            
+            if group_created:
+                created_count += 1
+            
+            # Sync memberships - add students who are assigned to this table
+            for enrollment in enrollments:
+                ActivityGroupMembership.objects.get_or_create(
+                    group_set=group_set,
+                    activity_group=group,
+                    user=enrollment.student,
+                )
+    
+    return group_set, created_count
 
 
 class StudentCurrentPromptsView(generics.ListAPIView):
@@ -31,11 +90,12 @@ class StudentCurrentPromptsView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        assignment_id = self.kwargs["assignment_id"]
+        # assignment_id here is actually ClassroomActivity.id (classroom-level)
+        classroom_activity_id = self.kwargs["assignment_id"]
         user = self.request.user
         group = (
             ActivityGroup.objects.filter(
-                group_set__assignment_id=assignment_id,
+                group_set__classroom_activity_id=classroom_activity_id,
                 memberships__user=user,
             )
             .prefetch_related("ai_runs")
@@ -56,9 +116,28 @@ class TeacherGroupsWithPromptsView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        assignment_id = self.kwargs["assignment_id"]
+        # assignment_id here is actually ClassroomActivity.id (classroom-level)
+        classroom_activity_id = self.kwargs["assignment_id"]
+        
+        # Try to auto-create groups from tables if none exist
+        try:
+            classroom_activity = ClassroomActivity.objects.select_related(
+                "classroom"
+            ).get(pk=classroom_activity_id)
+            
+            # Check if groups already exist
+            existing_groups = ActivityGroup.objects.filter(
+                group_set__classroom_activity_id=classroom_activity_id
+            ).exists()
+            
+            if not existing_groups:
+                # Auto-create from tables
+                create_groups_from_tables(classroom_activity, self.request.user)
+        except ClassroomActivity.DoesNotExist:
+            pass
+        
         return (
-            ActivityGroup.objects.filter(group_set__assignment_id=assignment_id)
+            ActivityGroup.objects.filter(group_set__classroom_activity_id=classroom_activity_id)
             .select_related("group_set")
             .prefetch_related(
                 Prefetch(
@@ -93,13 +172,12 @@ def generate_group_questions(request, group_id):
     """
     # Get the activity group
     group = get_object_or_404(
-        ActivityGroup.objects.select_related("group_set__assignment__classroom_activity"),
+        ActivityGroup.objects.select_related("group_set__classroom_activity__classroom"),
         pk=group_id
     )
     
     # Verify the user is authorized (teacher of the classroom)
-    assignment = group.group_set.assignment
-    classroom_activity = assignment.classroom_activity
+    classroom_activity = group.group_set.classroom_activity
     classroom = classroom_activity.classroom
     
     if classroom.created_by != request.user:
@@ -262,6 +340,10 @@ def generate_all_group_questions(request, assignment_id):
     Generate AI-powered discussion questions for ALL groups in an assignment.
     
     This is a batch operation for teachers to generate questions for all groups at once.
+    Groups are automatically created from classroom tables if they don't exist.
+    
+    Args:
+        assignment_id: ClassroomActivity.id (the classroom-level activity assignment)
     
     Request body (optional):
     {
@@ -271,35 +353,32 @@ def generate_all_group_questions(request, assignment_id):
     Returns:
         List of results for each group
     """
-    # Get the assignment
-    assignment = get_object_or_404(
-        ClassroomActivityAssignment.objects.select_related("classroom_activity__classroom"),
+    # Get the classroom activity (classroom-level assignment)
+    classroom_activity = get_object_or_404(
+        ClassroomActivity.objects.select_related("classroom"),
         pk=assignment_id
     )
     
     # Verify teacher authorization
-    classroom = assignment.classroom_activity.classroom
+    classroom = classroom_activity.classroom
     if classroom.created_by != request.user:
         return Response(
             {"error": "You do not have permission to generate questions for this assignment"},
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # Get or create the group set for this assignment
-    try:
-        group_set = ActivityGroupSet.objects.get(assignment=assignment)
-    except ActivityGroupSet.DoesNotExist:
-        return Response(
-            {"error": "No groups have been created for this assignment"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+    # Auto-create groups from classroom tables if they don't exist
+    group_set, created_count = create_groups_from_tables(classroom_activity, request.user)
+    
+    if created_count > 0:
+        logger.info(f"Auto-created {created_count} activity groups from classroom tables for classroom_activity {assignment_id}")
     
     # Get all groups
     groups = ActivityGroup.objects.filter(group_set=group_set, archived_at__isnull=True)
     
     if not groups.exists():
         return Response(
-            {"error": "No active groups found for this assignment"},
+            {"error": "No active groups found. Make sure students are assigned to tables in the classroom."},
             status=status.HTTP_404_NOT_FOUND
         )
     
@@ -347,13 +426,16 @@ def get_student_group_info(request, assignment_id):
     """
     Get the current student's group info and discussion prompts for an assignment.
     
+    Args:
+        assignment_id: ClassroomActivity.id (the classroom-level activity assignment)
+    
     Returns group details, members, and AI-generated prompts.
     """
     user = request.user
     
-    # Find the student's group for this assignment
+    # Find the student's group for this classroom activity
     membership = ActivityGroupMembership.objects.filter(
-        group_set__assignment_id=assignment_id,
+        group_set__classroom_activity_id=assignment_id,
         user=user
     ).select_related(
         "activity_group",

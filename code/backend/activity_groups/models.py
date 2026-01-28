@@ -8,10 +8,13 @@ class ActivityGroupSet(models.Model):
         CLOSED = "closed", "Closed"
         ARCHIVED = "archived", "Archived"
 
-    assignment = models.OneToOneField(
-        "classrooms.ClassroomActivityAssignment",
+    # Links to ClassroomActivity (classroom-level assignment), not individual student assignments
+    classroom_activity = models.OneToOneField(
+        "classrooms.ClassroomActivity",
         on_delete=models.CASCADE,
         related_name="activity_group_set",
+        null=True,  # Temporarily nullable for migration, can be made non-null later
+        blank=True,
     )
     status = models.CharField(
         max_length=20,
@@ -33,7 +36,7 @@ class ActivityGroupSet(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"GroupSet for assignment {self.assignment_id}"
+        return f"GroupSet for classroom_activity {self.classroom_activity_id}"
 
 
 class ActivityGroup(models.Model):
