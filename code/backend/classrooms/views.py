@@ -305,6 +305,19 @@ class StudentAssignmentListView(generics.ListAPIView):
             .order_by("due_at", "classroom_activity__assigned_at")
         )
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        # Collect all activity_ids to fetch metadata
+        activity_ids = [
+            assignment.classroom_activity.activity_id 
+            for assignment in queryset
+        ]
+        activity_map = _activity_metadata(activity_ids)
+        context = self.get_serializer_context()
+        context["activity_map"] = activity_map
+        serializer = self.get_serializer(queryset, many=True, context=context)
+        return Response(serializer.data)
+
 
 class TeacherDashboardStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]

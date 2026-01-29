@@ -77,11 +77,6 @@ def get_science_activity(request, activity_id):
     """
     try:
         activity = ScienceActivity.objects.get(activity_id=activity_id)
-        base_url = (
-            settings.PUBLIC_MEDIA_BASE_URL.rstrip("/")
-            if getattr(settings, "PUBLIC_MEDIA_BASE_URL", "")
-            else request.build_absolute_uri("/").rstrip("/")
-        )
 
         # Fetch related media
         with connection.cursor() as cursor:
@@ -103,7 +98,8 @@ def get_science_activity(request, activity_id):
             if path.startswith("http"):
                 file_url = path
             else:
-                file_url = f"{base_url}/{path}"
+                # Use relative URL for media - will be proxied by frontend
+                file_url = f"/media/{path}"
 
             media.append(
                 {
