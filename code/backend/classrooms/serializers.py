@@ -303,6 +303,9 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
     activity_id = serializers.CharField(
         source="classroom_activity.activity_id", read_only=True
     )
+    classroom_activity_id = serializers.IntegerField(
+        source="classroom_activity.id", read_only=True
+    )
     classroom = serializers.SerializerMethodField()
     activity_title = serializers.SerializerMethodField()
     pe = serializers.SerializerMethodField()
@@ -316,6 +319,7 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
         model = ClassroomActivityAssignment
         fields = [
             "id",
+            "classroom_activity_id",
             "activity_id",
             "activity_title",
             "pe",

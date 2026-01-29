@@ -22,6 +22,7 @@ import {
 
 type Assignment = {
     id: number;
+    classroom_activity_id: number;
     activity_id: string;
     activity_title: string | null;
     pe: string | null;
@@ -36,6 +37,7 @@ type Assignment = {
 
 type DiscussionGroup = {
     assignment_id: number;
+    classroom_activity_id: number;
     activity_title: string;
     classroom_name: string;
     has_prompts: boolean;
@@ -119,6 +121,9 @@ export function StudentDashboard() {
                     const normalised = data
                         .map((item: any): Assignment => ({
                             id: typeof item.id === "number" ? item.id : Number(item.id || 0),
+                            classroom_activity_id: typeof item.classroom_activity_id === "number" 
+                                ? item.classroom_activity_id 
+                                : Number(item.classroom_activity_id || 0),
                             activity_id:
                                 typeof item.activity_id === "string" ? item.activity_id : "",
                             activity_title:
@@ -316,12 +321,13 @@ export function StudentDashboard() {
                     return;
                 }
 
-                // For each assignment, check if the student has a group with prompts
+                // For each assignment, check if the student has a group with released prompts
                 const discussionList: DiscussionGroup[] = [];
                 
                 for (const assignment of assignments) {
                     try {
-                        const response = await fetch(`/api/activity-groups/assignments/${assignment.id}/my-group/`, {
+                        // Use classroom_activity_id for the group API (not the student assignment id)
+                        const response = await fetch(`/api/activity-groups/assignments/${assignment.classroom_activity_id}/my-group/`, {
                             headers: { Authorization: `Bearer ${token}` },
                         });
                         
@@ -330,6 +336,7 @@ export function StudentDashboard() {
                             if (data.has_prompts) {
                                 discussionList.push({
                                     assignment_id: assignment.id,
+                                    classroom_activity_id: assignment.classroom_activity_id,
                                     activity_title: assignment.activity_title || "Untitled Activity",
                                     classroom_name: assignment.classroom?.name || "Unknown Class",
                                     has_prompts: true,
@@ -802,7 +809,7 @@ export function StudentDashboard() {
                                             <div className="flex gap-2 mt-auto">
                                                 {hasDiscussion && (
                                                     <Button size="sm" variant="outline" asChild className="flex-1 border-purple-300 text-purple-700 hover:bg-purple-50">
-                                                        <Link to={`/dashboard/group-discussion/${assignment.id}`}>
+                                                        <Link to={`/dashboard/group-discussion/${assignment.classroom_activity_id}`}>
                                                             <MessageSquare className="w-4 h-4 mr-1" />
                                                             Discussion
                                                         </Link>
@@ -919,7 +926,7 @@ export function StudentDashboard() {
                                         </div>
 
                                         <Button asChild className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700">
-                                            <Link to={`/dashboard/group-discussion/${discussion.assignment_id}`}>
+                                            <Link to={`/dashboard/group-discussion/${discussion.classroom_activity_id}`}>
                                                 <MessageSquare className="w-4 h-4 mr-2" />
                                                 Join Discussion
                                             </Link>

@@ -41,6 +41,8 @@ import {
     CheckCircle2,
     MessageCircle,
     Brain,
+    ChevronDown,
+    ChevronUp,
 } from "lucide-react";
 
 // fetchWithAuth helper for fetching classrooms
@@ -96,6 +98,7 @@ export default function TeacherGroupPage() {
 
     // New API State
     const [classrooms, setClassrooms] = useState<any[]>([]);
+    const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
     const [allStudents, setAllStudents] = useState<Student[]>([]);
 
     // AI Questions Dialog State
@@ -709,10 +712,32 @@ export default function TeacherGroupPage() {
                                                         const hasPrompts = group.ai_runs && group.ai_runs.length > 0;
                                                         const latestRun = hasPrompts ? group.ai_runs[0] : null;
                                                         const isReleased = latestRun?.released_at !== null && latestRun?.released_at !== undefined;
+                                                        const isExpanded = expandedGroups.has(group.id);
+                                                        
+                                                        const toggleExpanded = () => {
+                                                            setExpandedGroups(prev => {
+                                                                const next = new Set(prev);
+                                                                if (next.has(group.id)) {
+                                                                    next.delete(group.id);
+                                                                } else {
+                                                                    next.add(group.id);
+                                                                }
+                                                                return next;
+                                                            });
+                                                        };
+                                                        
                                                         return (
                                                             <Card key={group.id} className="p-3">
-                                                                <div className="flex items-center justify-between">
+                                                                <div 
+                                                                    className="flex items-center justify-between cursor-pointer"
+                                                                    onClick={hasPrompts ? toggleExpanded : undefined}
+                                                                >
                                                                     <div className="flex items-center gap-2">
+                                                                        {hasPrompts && (
+                                                                            isExpanded ? 
+                                                                                <ChevronUp className="w-4 h-4 text-gray-500" /> : 
+                                                                                <ChevronDown className="w-4 h-4 text-gray-500" />
+                                                                        )}
                                                                         <Users className="w-4 h-4 text-gray-500" />
                                                                         <span className="font-medium">{group.label}</span>
                                                                     </div>
@@ -741,10 +766,57 @@ export default function TeacherGroupPage() {
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                {latestRun && (
-                                                                    <div className="mt-2 pl-6 text-sm text-gray-600">
-                                                                        <p className="line-clamp-2 italic">
-                                                                            "{latestRun.synthesized_summary_text.slice(0, 150)}..."
+                                                                
+                                                                {/* Expanded content with AI Analysis and Questions */}
+                                                                {latestRun && isExpanded && (
+                                                                    <div className="mt-4 space-y-4 border-t pt-4">
+                                                                        {/* AI Analysis Section */}
+                                                                        <div className="space-y-2">
+                                                                            <div className="flex items-center gap-2 text-sm font-medium text-purple-700">
+                                                                                <Brain className="w-4 h-4" />
+                                                                                AI Analysis Summary
+                                                                            </div>
+                                                                            <div className="max-h-48 overflow-y-auto rounded-lg border bg-purple-50 p-3">
+                                                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                                                                    {latestRun.synthesized_summary_text}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        
+                                                                        {/* Generated Questions Section */}
+                                                                        <div className="space-y-2">
+                                                                            <div className="flex items-center gap-2 text-sm font-medium text-indigo-700">
+                                                                                <MessageCircle className="w-4 h-4" />
+                                                                                Generated Questions ({latestRun.prompts.length})
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                {latestRun.prompts.map((prompt, idx) => (
+                                                                                    <div key={prompt.id} className="p-3 rounded-lg border bg-indigo-50">
+                                                                                        <div className="flex items-start gap-2">
+                                                                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
+                                                                                                Q{idx + 1}
+                                                                                            </span>
+                                                                                            <p className="text-sm text-gray-700 flex-1">
+                                                                                                {prompt.prompt_text}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                        <div className="mt-1 ml-8">
+                                                                                            <Badge variant="outline" className="text-xs capitalize">
+                                                                                                {prompt.prompt_type.replace('_', ' ')}
+                                                                                            </Badge>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {/* Collapsed preview */}
+                                                                {latestRun && !isExpanded && (
+                                                                    <div className="mt-2 pl-6 text-sm text-gray-500">
+                                                                        <p className="line-clamp-1 italic">
+                                                                            Click to view AI analysis and questions
                                                                         </p>
                                                                     </div>
                                                                 )}

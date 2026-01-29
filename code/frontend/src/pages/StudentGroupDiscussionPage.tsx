@@ -428,23 +428,6 @@ export default function StudentGroupDiscussionPage() {
                             </div>
                         </div>
 
-                        {/* AI Summary of Group Responses */}
-                        {summary && (
-                            <Card className="mb-6 border-indigo-200 bg-indigo-50/50">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm font-medium flex items-center gap-2 text-indigo-700">
-                                        <Brain className="w-4 h-4" />
-                                        AI Analysis of Your Group's Work
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-sm text-gray-700 leading-relaxed">
-                                        {summary}
-                                    </p>
-                                </CardContent>
-                            </Card>
-                        )}
-
                         {/* Questions Tabs */}
                         <Tabs 
                             value={activePromptId?.toString() || ""} 
@@ -484,7 +467,7 @@ export default function StudentGroupDiscussionPage() {
 
                                 return (
                                     <TabsContent key={prompt.id} value={prompt.id.toString()}>
-                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        <div className="w-full">
                                             {/* Question Card */}
                                             <Card className="h-fit">
                                                 <CardHeader>
@@ -512,24 +495,24 @@ export default function StudentGroupDiscussionPage() {
                                                             )}
                                                         </Button>
                                                     </div>
-                                                    <CardTitle className="text-lg mt-3">
+                                                    <CardTitle className="text-xl mt-3">
                                                         Question {prompt.prompt_order}
                                                     </CardTitle>
                                                 </CardHeader>
                                                 <CardContent>
-                                                    <div className={`p-4 rounded-lg bg-gradient-to-r ${config.gradient} bg-opacity-10`}>
-                                                        <p className="text-gray-800 leading-relaxed text-lg">
+                                                    <div className="p-6 rounded-lg bg-gray-50 border border-gray-200">
+                                                        <p className="text-gray-800 leading-relaxed text-xl">
                                                             {prompt.prompt_text}
                                                         </p>
                                                     </div>
 
                                                     {/* Tips section */}
-                                                    <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                                                        <div className="flex items-start gap-2">
-                                                            <Lightbulb className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                                    <div className="mt-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                                                        <div className="flex items-start gap-3">
+                                                            <Lightbulb className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                                                             <div>
-                                                                <p className="text-sm font-medium text-amber-800">Discussion Tips</p>
-                                                                <ul className="text-xs text-amber-700 mt-1 space-y-1">
+                                                                <p className="text-base font-medium text-amber-800">Discussion Tips</p>
+                                                                <ul className="text-sm text-amber-700 mt-2 space-y-1">
                                                                     <li>• Share your initial thoughts first</li>
                                                                     <li>• Build on others' ideas</li>
                                                                     <li>• Ask clarifying questions</li>
@@ -538,99 +521,6 @@ export default function StudentGroupDiscussionPage() {
                                                         </div>
                                                     </div>
                                                 </CardContent>
-                                            </Card>
-
-                                            {/* Discussion Card */}
-                                            <Card className="flex flex-col h-[500px]">
-                                                <CardHeader className="pb-3">
-                                                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                                        <MessageCircle className="w-4 h-4 text-teal-600" />
-                                                        Group Discussion
-                                                        {promptMessages.length > 0 && (
-                                                            <Badge variant="secondary" className="ml-auto">
-                                                                {promptMessages.length} messages
-                                                            </Badge>
-                                                        )}
-                                                    </CardTitle>
-                                                </CardHeader>
-                                                
-                                                <ScrollArea className="flex-1 px-4">
-                                                    {promptMessages.length === 0 ? (
-                                                        <div className="h-full flex items-center justify-center text-center py-12">
-                                                            <div>
-                                                                <MessageCircle className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-                                                                <p className="text-gray-500 text-sm">
-                                                                    No messages yet.
-                                                                </p>
-                                                                <p className="text-gray-400 text-xs mt-1">
-                                                                    Start the discussion!
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-4 pb-4">
-                                                            {promptMessages.map((msg) => (
-                                                                <div
-                                                                    key={msg.id}
-                                                                    className={`flex gap-3 ${msg.isMe ? 'flex-row-reverse' : ''}`}
-                                                                >
-                                                                    <div className={`w-8 h-8 rounded-full ${getAvatarColor(msg.studentId)} flex items-center justify-center text-white text-sm flex-shrink-0`}>
-                                                                        {msg.studentName.charAt(0)}
-                                                                    </div>
-                                                                    <div className={`max-w-[75%] ${msg.isMe ? 'text-right' : ''}`}>
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            {!msg.isMe && (
-                                                                                <span className="text-xs font-medium text-gray-700">
-                                                                                    {msg.studentName}
-                                                                                </span>
-                                                                            )}
-                                                                            <span className="text-xs text-gray-400">
-                                                                                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                            </span>
-                                                                            {msg.isMe && (
-                                                                                <span className="text-xs font-medium text-teal-600">
-                                                                                    You
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className={`p-3 rounded-2xl text-sm ${
-                                                                            msg.isMe 
-                                                                                ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-tr-sm' 
-                                                                                : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-                                                                        }`}>
-                                                                            {msg.text}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </ScrollArea>
-
-                                                {/* Message Input */}
-                                                <div className="p-4 border-t bg-gray-50">
-                                                    <div className="flex gap-2">
-                                                        <Input
-                                                            placeholder="Share your thoughts..."
-                                                            value={newMessage}
-                                                            onChange={(e) => setNewMessage(e.target.value)}
-                                                            onKeyPress={(e) => {
-                                                                if (e.key === 'Enter' && !e.shiftKey) {
-                                                                    e.preventDefault();
-                                                                    handleSendMessage();
-                                                                }
-                                                            }}
-                                                            className="flex-1"
-                                                        />
-                                                        <Button 
-                                                            onClick={handleSendMessage}
-                                                            disabled={!newMessage.trim()}
-                                                            className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600"
-                                                        >
-                                                            <Send className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
                                             </Card>
                                         </div>
                                     </TabsContent>
