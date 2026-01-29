@@ -26,6 +26,7 @@ class GroupAIRunSerializer(serializers.ModelSerializer):
             "synthesized_summary_text",
             "model_name",
             "model_params",
+            "released_at",
             "created_at",
             "prompts",
         ]

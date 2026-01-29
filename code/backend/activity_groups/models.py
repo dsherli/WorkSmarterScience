@@ -115,6 +115,11 @@ class GroupAIRun(models.Model):
     synthesized_summary_text = models.TextField()
     model_name = models.CharField(max_length=100)
     model_params = models.JSONField(default=dict)
+    released_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the questions were released to students. Null means not released."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

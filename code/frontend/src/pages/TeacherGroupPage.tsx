@@ -1,5 +1,5 @@
 ﻿import React, { useState, useRef, useEffect } from "react";
-import { groupsApi, groupPromptsApi, type GroupInfo, type GenerateAllQuestionsResult } from "../api/groups";
+import { groupsApi, groupPromptsApi, type GroupInfo, type GenerateAllQuestionsResult, type ReleaseQuestionsResult } from "../api/groups";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -105,6 +105,7 @@ export default function TeacherGroupPage() {
     const [aiGroups, setAiGroups] = useState<GroupInfo[]>([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [releasing, setReleasing] = useState(false);
     const [numQuestions, setNumQuestions] = useState<string>("4");
     const [generateResults, setGenerateResults] = useState<GenerateAllQuestionsResult | null>(null);
 
@@ -283,6 +284,36 @@ export default function TeacherGroupPage() {
             setGenerating(false);
         }
     };
+
+    // Handle releasing/un-releasing questions to students
+    const handleReleaseQuestions = async (release: boolean) => {
+        if (!selectedAssignment) return;
+        setReleasing(true);
+        try {
+            const result = await groupPromptsApi.releaseQuestions(selectedAssignment, release);
+            if (result.success) {
+                toast.success(result.message);
+                // Refresh groups to update UI
+                const data = await groupPromptsApi.getTeacherGroups(selectedAssignment);
+                setAiGroups(data);
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error(`Failed to ${release ? 'release' : 'un-release'} questions`);
+        } finally {
+            setReleasing(false);
+        }
+    };
+
+    // Check if any groups have released questions
+    const hasReleasedQuestions = aiGroups.some(group => 
+        group.ai_runs?.some(run => run.released_at !== null)
+    );
+    
+    // Check if any groups have unreleased questions ready
+    const hasUnreleasedQuestions = aiGroups.some(group => 
+        group.ai_runs?.some(run => run.prompts.length > 0 && run.released_at === null)
+    );
 
     const generateClassroomLayout = (count: number): Table[] => {
         const tables: Table[] = [];
@@ -587,8 +618,8 @@ export default function TeacherGroupPage() {
 
                                     {selectedAssignment && (
                                         <>
-                                            {/* Number of Questions */}
-                                            <div className="flex items-center gap-4">
+                                            {/* Number of Questions + Generate Button */}
+                                            <div className="flex items-center gap-4 flex-wrap">
                                                 <Label>Questions per group:</Label>
                                                 <Select value={numQuestions} onValueChange={setNumQuestions}>
                                                     <SelectTrigger className="w-20">
@@ -613,6 +644,53 @@ export default function TeacherGroupPage() {
                                                 </Button>
                                             </div>
 
+                                            {/* Release Button */}
+                                            {(hasUnreleasedQuestions || hasReleasedQuestions) && (
+                                                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-medium text-blue-800">
+                                                            {hasReleasedQuestions 
+                                                                ? "Questions are visible to students"
+                                                                : "Questions are ready but not visible to students yet"
+                                                            }
+                                                        </p>
+                                                        <p className="text-xs text-blue-600 mt-0.5">
+                                                            {hasReleasedQuestions 
+                                                                ? "Students can now see and discuss the AI-generated questions"
+                                                                : "Click 'Release to Students' to make questions visible"
+                                                            }
+                                                        </p>
+                                                    </div>
+                                                    {hasReleasedQuestions ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleReleaseQuestions(false)}
+                                                            disabled={releasing}
+                                                            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                                                        >
+                                                            {releasing ? (
+                                                                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />...</>
+                                                            ) : (
+                                                                <>Hide from Students</>
+                                                            )}
+                                                        </Button>
+                                                    ) : (
+                                                        <Button
+                                                            onClick={() => handleReleaseQuestions(true)}
+                                                            disabled={releasing}
+                                                            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                                                        >
+                                                            {releasing ? (
+                                                                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Releasing...</>
+                                                            ) : (
+                                                                <><Send className="w-4 h-4 mr-2" />Release to Students</>
+                                                            )}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {/* Groups List */}
                                             {aiLoading ? (
                                                 <div className="flex items-center justify-center py-8">
@@ -630,6 +708,7 @@ export default function TeacherGroupPage() {
                                                     {aiGroups.map((group) => {
                                                         const hasPrompts = group.ai_runs && group.ai_runs.length > 0;
                                                         const latestRun = hasPrompts ? group.ai_runs[0] : null;
+                                                        const isReleased = latestRun?.released_at !== null && latestRun?.released_at !== undefined;
                                                         return (
                                                             <Card key={group.id} className="p-3">
                                                                 <div className="flex items-center justify-between">
@@ -637,16 +716,30 @@ export default function TeacherGroupPage() {
                                                                         <Users className="w-4 h-4 text-gray-500" />
                                                                         <span className="font-medium">{group.label}</span>
                                                                     </div>
-                                                                    {hasPrompts ? (
-                                                                        <Badge className="bg-green-100 text-green-700 border-green-200">
-                                                                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                            {latestRun?.prompts.length || 0} questions ready
-                                                                        </Badge>
-                                                                    ) : (
-                                                                        <Badge variant="outline" className="text-gray-500">
-                                                                            No questions yet
-                                                                        </Badge>
-                                                                    )}
+                                                                    <div className="flex items-center gap-2">
+                                                                        {hasPrompts ? (
+                                                                            <>
+                                                                                <Badge className="bg-green-100 text-green-700 border-green-200">
+                                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                                    {latestRun?.prompts.length || 0} questions
+                                                                                </Badge>
+                                                                                {isReleased ? (
+                                                                                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                                                                                        <Send className="w-3 h-3 mr-1" />
+                                                                                        Released
+                                                                                    </Badge>
+                                                                                ) : (
+                                                                                    <Badge variant="outline" className="text-amber-600 border-amber-300">
+                                                                                        Not released
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </>
+                                                                        ) : (
+                                                                            <Badge variant="outline" className="text-gray-500">
+                                                                                No questions yet
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                                 {latestRun && (
                                                                     <div className="mt-2 pl-6 text-sm text-gray-600">

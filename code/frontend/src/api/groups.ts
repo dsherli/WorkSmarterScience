@@ -44,6 +44,7 @@ export interface GroupAIRun {
     run_reason: string;
     synthesized_summary_text: string;
     model_name: string;
+    released_at: string | null;
     created_at: string;
     prompts: GroupAIPrompt[];
 }
@@ -69,6 +70,7 @@ export interface StudentGroupInfo {
     };
     members: GroupMember[];
     has_prompts: boolean;
+    is_released: boolean;
     summary: string;
     prompts: GroupAIPrompt[];
     last_updated: string | null;
@@ -97,6 +99,13 @@ export interface GenerateAllQuestionsResult {
     }>;
 }
 
+export interface ReleaseQuestionsResult {
+    success: boolean;
+    message: string;
+    released_count: number;
+    is_released: boolean;
+}
+
 export const groupPromptsApi = {
     // Get current prompts for student's group in an assignment
     getStudentPrompts: (assignmentId: string | number): Promise<GroupAIPrompt[]> =>
@@ -122,6 +131,13 @@ export const groupPromptsApi = {
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/generate-all/`, {
             method: "POST",
             body: JSON.stringify({ num_questions: numQuestions }),
+        }),
+    
+    // Release or un-release questions to students (teacher only)
+    releaseQuestions: (assignmentId: string | number, release: boolean = true): Promise<ReleaseQuestionsResult> =>
+        fetchWithAuth(`/activity-groups/assignments/${assignmentId}/release-questions/`, {
+            method: "POST",
+            body: JSON.stringify({ release }),
         }),
 };
 

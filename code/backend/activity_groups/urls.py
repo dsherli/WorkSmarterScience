@@ -25,6 +25,11 @@ urlpatterns = [
         views.generate_all_group_questions,
         name="generate-all-questions",
     ),
+    path(
+        "assignments/<int:assignment_id>/release-questions/",
+        views.release_questions,
+        name="release-questions",
+    ),
     
     # Group-specific endpoints
     path(
