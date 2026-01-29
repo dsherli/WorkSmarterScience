@@ -50,7 +50,9 @@ class ClassroomListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Classroom.objects.filter(created_by=self.request.user)
+        return Classroom.objects.filter(
+            created_by=self.request.user
+        ).exclude(status="deleted")
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -65,7 +67,12 @@ class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         return Classroom.objects.filter(
             Q(created_by=user) | Q(enrollments__student=user)
-        ).distinct()
+        ).exclude(status="deleted").distinct()
+
+    def perform_destroy(self, instance):
+        """Soft delete: set status to 'deleted' instead of hard delete."""
+        instance.status = "deleted"
+        instance.save(update_fields=["status"])
 
 
 class EnrollmentJoinView(generics.CreateAPIView):
@@ -89,6 +96,7 @@ class ClassroomMembershipListView(generics.ListAPIView):
 
         return (
             Classroom.objects.filter(enrollments__student=user)
+            .exclude(status="deleted")
             .select_related("created_by")
             .prefetch_related("enrollments")
             .distinct()
@@ -218,7 +226,9 @@ class ClassroomActivityListView(generics.ListAPIView):
         classroom_id = self.kwargs.get("classroom_id")
         user = self.request.user
         classroom = get_object_or_404(
-            Classroom.objects.filter(Q(created_by=user) | Q(enrollments__student=user)).distinct(),
+            Classroom.objects.filter(
+                Q(created_by=user) | Q(enrollments__student=user)
+            ).exclude(status="deleted").distinct(),
             pk=classroom_id
         )
         self.classroom = classroom
@@ -300,7 +310,10 @@ class StudentAssignmentListView(generics.ListAPIView):
 
     def get_queryset(self):
         return (
-            ClassroomActivityAssignment.objects.filter(student=self.request.user)
+            ClassroomActivityAssignment.objects.filter(
+                student=self.request.user,
+                classroom_activity__classroom__status__in=["active", "archived"]
+            )
             .select_related("classroom_activity__classroom")
             .order_by("due_at", "classroom_activity__assigned_at")
         )
@@ -324,7 +337,7 @@ class TeacherDashboardStatsView(APIView):
 
     def get(self, request):
         user = request.user
-        classrooms = Classroom.objects.filter(created_by=user)
+        classrooms = Classroom.objects.filter(created_by=user).exclude(status="deleted")
         
         # Calculate stats
         total_students = Enrollment.objects.filter(classroom__in=classrooms).values("student").distinct().count()
@@ -359,7 +372,7 @@ class TeacherDashboardActivitiesView(APIView):
 
     def get(self, request):
         user = request.user
-        classrooms = Classroom.objects.filter(created_by=user)
+        classrooms = Classroom.objects.filter(created_by=user).exclude(status="deleted")
         
         # Get recent ClassroomActivities assigned to the teacher's classrooms
         activities = ClassroomActivity.objects.filter(
@@ -379,7 +392,7 @@ class TeacherDashboardReviewsView(APIView):
     
     def get(self, request):
         user = request.user
-        classrooms = Classroom.objects.filter(created_by=user)
+        classrooms = Classroom.objects.filter(created_by=user).exclude(status="deleted")
         
         # Get activity IDs assigned to the teacher's classrooms
         classroom_activity_ids = ClassroomActivity.objects.filter(
@@ -477,10 +490,10 @@ class AddStudentView(APIView):
         # If classroom_id provided, use that classroom; otherwise pick the first one
         if classroom_id:
             classroom = get_object_or_404(
-                Classroom, pk=classroom_id, created_by=request.user
+                Classroom.objects.exclude(status="deleted"), pk=classroom_id, created_by=request.user
             )
         else:
-            classroom = Classroom.objects.filter(created_by=request.user).first()
+            classroom = Classroom.objects.filter(created_by=request.user).exclude(status="deleted").first()
             if not classroom:
                 return Response(
                     {"detail": "No classroom found for this teacher"},
@@ -726,7 +739,9 @@ class AnnouncementListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         # Must be creator or enrolled
         classroom = get_object_or_404(
-            Classroom.objects.filter(Q(created_by=user) | Q(enrollments__student=user)).distinct(),
+            Classroom.objects.filter(
+                Q(created_by=user) | Q(enrollments__student=user)
+            ).exclude(status="deleted").distinct(),
             pk=classroom_id
         )
         return Announcement.objects.filter(classroom=classroom)
@@ -735,7 +750,7 @@ class AnnouncementListCreateView(generics.ListCreateAPIView):
         classroom_id = self.kwargs.get("classroom_id")
         # Only creator (teacher) can create announcements
         classroom = get_object_or_404(
-            Classroom, pk=classroom_id, created_by=self.request.user
+            Classroom.objects.exclude(status="deleted"), pk=classroom_id, created_by=self.request.user
         )
         announcement = serializer.save(classroom=classroom, author=self.request.user)
         

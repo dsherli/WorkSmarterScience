@@ -261,6 +261,7 @@ class StudentCurrentPromptsView(generics.ListAPIView):
         group = (
             ActivityGroup.objects.filter(
                 group_set__classroom_activity_id=classroom_activity_id,
+                group_set__classroom_activity__classroom__status__in=["active", "archived"],
                 memberships__user=user,
             )
             .prefetch_related("ai_runs")
@@ -288,7 +289,10 @@ class TeacherGroupsWithPromptsView(generics.ListAPIView):
         try:
             classroom_activity = ClassroomActivity.objects.select_related(
                 "classroom"
-            ).get(pk=classroom_activity_id)
+            ).get(
+                pk=classroom_activity_id,
+                classroom__status__in=["active", "archived"]
+            )
             
             # Check if groups already exist
             existing_groups = ActivityGroup.objects.filter(
@@ -302,7 +306,10 @@ class TeacherGroupsWithPromptsView(generics.ListAPIView):
             pass
         
         return (
-            ActivityGroup.objects.filter(group_set__classroom_activity_id=classroom_activity_id)
+            ActivityGroup.objects.filter(
+                group_set__classroom_activity_id=classroom_activity_id,
+                group_set__classroom_activity__classroom__status__in=["active", "archived"]
+            )
             .select_related("group_set")
             .prefetch_related(
                 Prefetch(
