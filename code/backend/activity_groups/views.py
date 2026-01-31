@@ -601,3 +601,62 @@ def get_student_group_info(request, assignment_id):
         "prompts": prompts,
         "last_updated": latest_run.created_at if latest_run else None,
     })
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def update_prompt(request, prompt_id):
+    """
+    Update or delete a specific AI-generated prompt (teacher only).
+    
+    PATCH: Update the prompt_text and/or prompt_type
+    DELETE: Remove the prompt
+    
+    Only the teacher who owns the classroom can modify prompts.
+    Cannot modify prompts that have already been released to students.
+    """
+    prompt = get_object_or_404(GroupAIPrompt, pk=prompt_id)
+    
+    # Get the classroom through the chain: prompt -> run -> group -> group_set -> classroom_activity -> classroom
+    ai_run = prompt.group_ai_run
+    group = ai_run.activity_group
+    classroom_activity = group.group_set.classroom_activity
+    classroom = classroom_activity.classroom
+    
+    # Verify teacher owns the classroom
+    if classroom.created_by != request.user:
+        return Response(
+            {"error": "You do not have permission to modify this prompt"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Check if questions have been released
+    if ai_run.released_at is not None:
+        return Response(
+            {"error": "Cannot modify prompts that have been released to students. Please un-release first."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if request.method == "DELETE":
+        prompt.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    # PATCH - update the prompt
+    prompt_text = request.data.get("prompt_text")
+    prompt_type = request.data.get("prompt_type")
+    
+    if prompt_text is not None:
+        prompt.prompt_text = prompt_text
+    
+    if prompt_type is not None:
+        if prompt_type not in [choice[0] for choice in GroupAIPrompt.PromptType.choices]:
+            return Response(
+                {"error": f"Invalid prompt_type. Must be one of: {[c[0] for c in GroupAIPrompt.PromptType.choices]}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        prompt.prompt_type = prompt_type
+    
+    prompt.save()
+    
+    serializer = GroupAIPromptSerializer(prompt)
+    return Response(serializer.data)

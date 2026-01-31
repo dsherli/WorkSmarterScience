@@ -75,7 +75,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                                className="lg:hidden"
                             >
                                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                             </Button>
@@ -151,7 +150,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
             <div className="flex relative">
                 {/* Primary Narrow Sidebar (Canvas style) */}
-                <aside className="fixed top-16 left-0 z-50 w-20 h-[calc(100vh-4rem)] bg-teal-800 border-r flex flex-col items-center py-6 shadow-xl scrollbar-hide overflow-y-auto overflow-x-hidden">
+                <aside className={`fixed top-16 left-0 z-50 w-20 h-[calc(100vh-4rem)] bg-teal-800 border-r flex flex-col items-center py-6 shadow-xl scrollbar-hide overflow-y-auto overflow-x-hidden transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                     {/* Nav Items Group */}
                     <div className="flex flex-col items-center w-full gap-2">
                         {navItems.map((item, index) => {
@@ -213,8 +212,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 {/* Main Content Area */}
                 <main
                     className={`flex-1 min-h-[calc(100vh-4rem)] transition-all duration-300 
-                        ${coursesDrawerOpen ? "lg:ml-[21rem]" : "lg:ml-20"} 
-                        ml-0
+                        ${!sidebarOpen ? "ml-0" : coursesDrawerOpen ? "lg:ml-[21rem]" : "lg:ml-20"} 
+                        ${sidebarOpen ? "ml-20" : "ml-0"}
                     `}
                 >
                     <div className="p-0 h-full">

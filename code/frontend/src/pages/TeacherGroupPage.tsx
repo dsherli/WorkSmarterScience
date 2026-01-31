@@ -43,7 +43,11 @@ import {
     Brain,
     ChevronDown,
     ChevronUp,
+    Pencil,
+    Trash2,
+    Save,
 } from "lucide-react";
+import { Textarea } from "../components/ui/textarea";
 
 // fetchWithAuth helper for fetching classrooms
 const fetchWithAuth = async (url: string) => {
@@ -111,6 +115,12 @@ export default function TeacherGroupPage() {
     const [releasing, setReleasing] = useState(false);
     const [numQuestions, setNumQuestions] = useState<string>("4");
     const [generateResults, setGenerateResults] = useState<GenerateAllQuestionsResult | null>(null);
+
+    // Prompt editing state
+    const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
+    const [editingPromptText, setEditingPromptText] = useState<string>("");
+    const [editingPromptType, setEditingPromptType] = useState<string>("");
+    const [savingPrompt, setSavingPrompt] = useState(false);
 
     // Fetch classrooms on mount
     useEffect(() => {
@@ -305,6 +315,58 @@ export default function TeacherGroupPage() {
             toast.error(`Failed to ${release ? 'release' : 'un-release'} questions`);
         } finally {
             setReleasing(false);
+        }
+    };
+
+    // Handle starting to edit a prompt
+    const handleStartEditPrompt = (prompt: { id: number; prompt_text: string; prompt_type: string }) => {
+        setEditingPromptId(prompt.id);
+        setEditingPromptText(prompt.prompt_text);
+        setEditingPromptType(prompt.prompt_type);
+    };
+
+    // Handle canceling edit
+    const handleCancelEditPrompt = () => {
+        setEditingPromptId(null);
+        setEditingPromptText("");
+        setEditingPromptType("");
+    };
+
+    // Handle saving edited prompt
+    const handleSavePrompt = async () => {
+        if (!editingPromptId || !selectedAssignment) return;
+        setSavingPrompt(true);
+        try {
+            await groupPromptsApi.updatePrompt(editingPromptId, {
+                prompt_text: editingPromptText,
+                prompt_type: editingPromptType,
+            });
+            toast.success("Question updated");
+            // Refresh groups
+            const data = await groupPromptsApi.getTeacherGroups(selectedAssignment);
+            setAiGroups(data);
+            handleCancelEditPrompt();
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.message || "Failed to update question");
+        } finally {
+            setSavingPrompt(false);
+        }
+    };
+
+    // Handle deleting a prompt
+    const handleDeletePrompt = async (promptId: number) => {
+        if (!selectedAssignment) return;
+        if (!confirm("Are you sure you want to delete this question?")) return;
+        try {
+            await groupPromptsApi.deletePrompt(promptId);
+            toast.success("Question deleted");
+            // Refresh groups
+            const data = await groupPromptsApi.getTeacherGroups(selectedAssignment);
+            setAiGroups(data);
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.message || "Failed to delete question");
         }
     };
 
@@ -522,8 +584,8 @@ export default function TeacherGroupPage() {
     };
 
     return (
-        <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-br from-slate-100 to-slate-200">
-            <div className="bg-white border-b p-3 shadow-sm">
+        <div className="h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+            <div className="bg-white border-b p-3 shadow-sm flex-shrink-0">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 flex-1">
                         <div>
@@ -785,26 +847,112 @@ export default function TeacherGroupPage() {
                                                                         
                                                                         {/* Generated Questions Section */}
                                                                         <div className="space-y-2">
-                                                                            <div className="flex items-center gap-2 text-sm font-medium text-indigo-700">
-                                                                                <MessageCircle className="w-4 h-4" />
-                                                                                Generated Questions ({latestRun.prompts.length})
+                                                                            <div className="flex items-center justify-between">
+                                                                                <div className="flex items-center gap-2 text-sm font-medium text-indigo-700">
+                                                                                    <MessageCircle className="w-4 h-4" />
+                                                                                    Generated Questions ({latestRun.prompts.length})
+                                                                                </div>
+                                                                                {!isReleased && (
+                                                                                    <span className="text-xs text-gray-500">
+                                                                                        Click pencil to edit
+                                                                                    </span>
+                                                                                )}
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 {latestRun.prompts.map((prompt, idx) => (
                                                                                     <div key={prompt.id} className="p-3 rounded-lg border bg-indigo-50">
-                                                                                        <div className="flex items-start gap-2">
-                                                                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
-                                                                                                Q{idx + 1}
-                                                                                            </span>
-                                                                                            <p className="text-sm text-gray-700 flex-1">
-                                                                                                {prompt.prompt_text}
-                                                                                            </p>
-                                                                                        </div>
-                                                                                        <div className="mt-1 ml-8">
-                                                                                            <Badge variant="outline" className="text-xs capitalize">
-                                                                                                {prompt.prompt_type.replace('_', ' ')}
-                                                                                            </Badge>
-                                                                                        </div>
+                                                                                        {editingPromptId === prompt.id ? (
+                                                                                            // Edit mode
+                                                                                            <div className="space-y-3">
+                                                                                                <div className="flex items-start gap-2">
+                                                                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded mt-1">
+                                                                                                        Q{idx + 1}
+                                                                                                    </span>
+                                                                                                    <Textarea
+                                                                                                        value={editingPromptText}
+                                                                                                        onChange={(e) => setEditingPromptText(e.target.value)}
+                                                                                                        className="flex-1 min-h-[80px] text-sm"
+                                                                                                        placeholder="Enter question text..."
+                                                                                                    />
+                                                                                                </div>
+                                                                                                <div className="flex items-center justify-between ml-8">
+                                                                                                    <Select value={editingPromptType} onValueChange={setEditingPromptType}>
+                                                                                                        <SelectTrigger className="w-40 h-8 text-xs">
+                                                                                                            <SelectValue />
+                                                                                                        </SelectTrigger>
+                                                                                                        <SelectContent>
+                                                                                                            <SelectItem value="follow_up">Follow Up</SelectItem>
+                                                                                                            <SelectItem value="reflection">Reflection</SelectItem>
+                                                                                                            <SelectItem value="extension">Extension</SelectItem>
+                                                                                                            <SelectItem value="check_in">Check In</SelectItem>
+                                                                                                        </SelectContent>
+                                                                                                    </Select>
+                                                                                                    <div className="flex items-center gap-2">
+                                                                                                        <Button
+                                                                                                            size="sm"
+                                                                                                            variant="ghost"
+                                                                                                            onClick={handleCancelEditPrompt}
+                                                                                                            className="h-8 text-xs"
+                                                                                                        >
+                                                                                                            Cancel
+                                                                                                        </Button>
+                                                                                                        <Button
+                                                                                                            size="sm"
+                                                                                                            onClick={handleSavePrompt}
+                                                                                                            disabled={savingPrompt || !editingPromptText.trim()}
+                                                                                                            className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700"
+                                                                                                        >
+                                                                                                            {savingPrompt ? (
+                                                                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                                                                            ) : (
+                                                                                                                <><Save className="w-3 h-3 mr-1" />Save</>
+                                                                                                            )}
+                                                                                                        </Button>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            // View mode
+                                                                                            <>
+                                                                                                <div className="flex items-start gap-2">
+                                                                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
+                                                                                                        Q{idx + 1}
+                                                                                                    </span>
+                                                                                                    <p className="text-sm text-gray-700 flex-1">
+                                                                                                        {prompt.prompt_text}
+                                                                                                    </p>
+                                                                                                    {!isReleased && (
+                                                                                                        <div className="flex items-center gap-1">
+                                                                                                            <button
+                                                                                                                onClick={(e) => {
+                                                                                                                    e.stopPropagation();
+                                                                                                                    handleStartEditPrompt(prompt);
+                                                                                                                }}
+                                                                                                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                                                                                                                title="Edit question"
+                                                                                                            >
+                                                                                                                <Pencil className="w-3.5 h-3.5" />
+                                                                                                            </button>
+                                                                                                            <button
+                                                                                                                onClick={(e) => {
+                                                                                                                    e.stopPropagation();
+                                                                                                                    handleDeletePrompt(prompt.id);
+                                                                                                                }}
+                                                                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors"
+                                                                                                                title="Delete question"
+                                                                                                            >
+                                                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                                                            </button>
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                                <div className="mt-1 ml-8">
+                                                                                                    <Badge variant="outline" className="text-xs capitalize">
+                                                                                                        {prompt.prompt_type.replace('_', ' ')}
+                                                                                                    </Badge>
+                                                                                                </div>
+                                                                                            </>
+                                                                                        )}
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
@@ -859,8 +1007,8 @@ export default function TeacherGroupPage() {
                 </div>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 relative overflow-hidden">
+            <div className="flex-1 flex overflow-hidden min-h-0">
+                <div className="flex-1 relative overflow-hidden min-w-0">
                     {tables.length === 0 ? (
                         <div
                             className="h-full flex items-center justify-center"
@@ -886,14 +1034,14 @@ export default function TeacherGroupPage() {
                         <>
                             <div
                                 ref={classroomRef}
-                                className="w-full h-full overflow-hidden cursor-grab active:cursor-grabbing bg-gray-200"
+                                className="absolute inset-0 overflow-hidden cursor-grab active:cursor-grabbing bg-gray-200"
                                 onMouseDown={handleMouseDown}
                                 onMouseMove={handleMouseMove}
                                 onMouseUp={handleMouseUp}
                                 onMouseLeave={handleMouseUp}
                             >
                                 <div
-                                    className="relative w-full h-full"
+                                    className="absolute"
                                     style={{
                                         transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                                         transformOrigin: "0 0",
@@ -936,7 +1084,7 @@ export default function TeacherGroupPage() {
                     )}
                 </div>
 
-                <div className="bg-white border-l shadow-lg flex flex-col w-80">
+                <div className="bg-white border-l shadow-lg flex flex-col w-80 flex-shrink-0">
                     {selectedTable ? (
                         <div className="flex flex-col h-full">
                             <div className="p-4 border-b bg-gradient-to-r from-teal-50 to-cyan-50">

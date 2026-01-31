@@ -115,11 +115,9 @@ export default function ClassroomsPage() {
             if (res.ok) {
                 const data = await res.json();
                 const filtered = data
-                    .filter(
-                        (c) => c.status !== "deleted" && c.created_by_id === user?.id
-                    )
-                    .sort((a, b) => {
-                        const order = { active: 1, archived: 2 };
+                    .filter((c: any) => c.status !== "deleted")
+                    .sort((a: any, b: any) => {
+                        const order: Record<string, number> = { active: 1, archived: 2 };
                         if (order[a.status] !== order[b.status]) {
                             return order[a.status] - order[b.status];
                         }

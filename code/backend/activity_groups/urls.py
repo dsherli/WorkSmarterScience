@@ -37,4 +37,11 @@ urlpatterns = [
         views.generate_group_questions,
         name="generate-group-questions",
     ),
+    
+    # Prompt editing endpoint (teacher only)
+    path(
+        "prompts/<int:prompt_id>/",
+        views.update_prompt,
+        name="update-prompt",
+    ),
 ]

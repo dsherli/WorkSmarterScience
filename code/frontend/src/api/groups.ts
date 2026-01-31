@@ -106,6 +106,14 @@ export interface ReleaseQuestionsResult {
     is_released: boolean;
 }
 
+export interface UpdatePromptResult {
+    id: number;
+    prompt_order: number;
+    prompt_text: string;
+    prompt_type: 'follow_up' | 'reflection' | 'extension' | 'check_in';
+    created_at: string;
+}
+
 export const groupPromptsApi = {
     // Get current prompts for student's group in an assignment
     getStudentPrompts: (assignmentId: string | number): Promise<GroupAIPrompt[]> =>
@@ -138,6 +146,19 @@ export const groupPromptsApi = {
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/release-questions/`, {
             method: "POST",
             body: JSON.stringify({ release }),
+        }),
+    
+    // Update a specific prompt (teacher only)
+    updatePrompt: (promptId: string | number, data: { prompt_text?: string; prompt_type?: string }): Promise<UpdatePromptResult> =>
+        fetchWithAuth(`/activity-groups/prompts/${promptId}/`, {
+            method: "PATCH",
+            body: JSON.stringify(data),
+        }),
+    
+    // Delete a specific prompt (teacher only)
+    deletePrompt: (promptId: string | number): Promise<null> =>
+        fetchWithAuth(`/activity-groups/prompts/${promptId}/`, {
+            method: "DELETE",
         }),
 };
 
