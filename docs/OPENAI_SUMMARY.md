@@ -152,7 +152,7 @@ Each request logs:
 - User who made the request
 - Activity ID (if applicable)
 - Full prompt and response
-- Model used (gpt-4, gpt-3.5-turbo, etc.)
+- Model used (gpt-5)
 - Tokens consumed
 - Timestamp
 
@@ -223,7 +223,7 @@ WorkSmarterScience/
 - **Database**: Migrations were run against your Neon PostgreSQL database
 - **API Keys**: Remember to never commit `.env` to git (it's in `.gitignore`)
 - **Costs**: Monitor usage via OpenAI dashboard to control costs
-- **Models**: Default is GPT-4; you can change to GPT-3.5-turbo for lower costs
+- **Models**: Default is gpt-5; you can change to gpt-5-mini for lower costs
 
 ## 🎓 Learning Resources
 

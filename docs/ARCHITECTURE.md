@@ -472,7 +472,7 @@ def grade_with_rubric(self, question, answer, rubric):
     
     # 2. Call OpenAI API
     response = self.client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-5",
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"}
     )

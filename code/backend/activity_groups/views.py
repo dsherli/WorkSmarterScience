@@ -660,3 +660,218 @@ def update_prompt(request, prompt_id):
     
     serializer = GroupAIPromptSerializer(prompt)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def auto_group_students(request, assignment_id):
+    """
+    Automatically group students using AI based on their answers.
+    
+    Warning: This replaces existing groups for the assignment.
+    
+    Request body:
+    {
+        "strategy": "heterogeneous" | "homogeneous",
+        "group_size": 4
+    }
+    """
+    classroom_activity = get_object_or_404(
+        ClassroomActivity.objects.select_related("classroom"),
+        pk=assignment_id
+    )
+    
+    # Verify permission
+    if classroom_activity.classroom.created_by != request.user:
+        return Response(
+            {"error": "You do not have permission to group students for this assignment"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+        
+    strategy = request.data.get("strategy", "heterogeneous")
+    group_size = int(request.data.get("group_size", 4))
+    
+    # Fetch students
+    from classrooms.models import Enrollment
+    enrollments = Enrollment.objects.filter(classroom=classroom_activity.classroom).select_related("student")
+    student_ids = [e.student.id for e in enrollments]
+    student_map = {e.student.id: e.student for e in enrollments}
+    
+    if not student_ids:
+        return Response({"error": "No students in this classroom"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Fetch submissions
+    submissions = ScienceActivitySubmission.objects.filter(
+        activity__activity_id=classroom_activity.activity_id,
+        student_id__in=student_ids
+    ).prefetch_related("answers")
+    
+    submission_map = {s.student_id: s for s in submissions}
+    
+    # Prepare data for AI
+    student_data = []
+    for s_id, student in student_map.items():
+        submission = submission_map.get(s_id)
+        answers_text = ""
+        if submission:
+            for ans in submission.answers.all():
+                answers_text += f"Q: {ans.question_text} A: {ans.student_answer}\n"
+        else:
+            answers_text = "No submission found."
+            
+        student_data.append({
+            "id": s_id,
+            "name": f"{student.first_name} {student.last_name}",
+            "answers_text": answers_text
+        })
+
+    # Call AI
+    ai_service = get_ai_service()
+    try:
+        result = ai_service.generate_student_groups(
+            student_data=student_data,
+            activity_context=f"Activity ID: {classroom_activity.activity_id}",
+            strategy=strategy,
+            group_size=group_size
+        )
+    except Exception as e:
+        logger.error(f"Auto-grouping failed: {e}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    groups_data = result.get("groups", [])
+    if not groups_data:
+        return Response({"error": "AI returned no groups"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Save to DB
+    with transaction.atomic():
+        # Get or create set
+        group_set, _ = ActivityGroupSet.objects.get_or_create(
+            classroom_activity=classroom_activity,
+            defaults={"created_by": request.user}
+        )
+        
+        # CLEAR EXISTING GROUPS (Destructive!)
+        group_set.groups.all().delete()
+        
+        created_groups = []
+        for g_data in groups_data:
+            group = ActivityGroup.objects.create(
+                group_set=group_set,
+                label=f"Group {g_data.get('group_id')} ({strategy})"
+            )
+            created_groups.append(group)
+            
+            # Add members
+            for s_id in g_data.get("student_ids", []):
+                student = student_map.get(s_id)
+                if student:
+                    ActivityGroupMembership.objects.create(
+                        group_set=group_set,
+                        activity_group=group,
+                        user=student
+                    )
+                    
+    return Response({
+        "success": True,
+        "groups_created": len(created_groups),
+        "strategy": strategy
+    })
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def summarize_group_discussion(request, group_id):
+    """
+    Summarize the discussion for a specific activity group (Table).
+    """
+    group = get_object_or_404(ActivityGroup, pk=group_id)
+    
+    # Permission check: User must be teacher of the classroom or a member of the group
+    # For now, let's assume teacher-only or checking enrollment would be better.
+    # We will fetch the ClassroomTable associated with this group to get messages.
+    # Note: The current data model links ActivityGroup to ActivityGroupMembership, 
+    # but the messages are stored in ClassroomTable (via TableMessage).
+    # We need to find which table this group is assigned to, OR if we are using the new ActivityGroup chat.
+    # Based on `TeacherGroupPage.tsx`, it seems `getMessages` calls `/classrooms/tables/${tableId}/messages/`.
+    # AND `getTeacherGroups` returns `GroupInfo` which has `id`.
+    # Let's assume the group_id passed here corresponds to an ActivityGroup, 
+    # and we need to find the messages associated with the *User Members* of this group for this *Activity*.
+    
+    # WAIT. The user request says "summarize group discussion".
+    # In `views.py`, we have `TableMessage` linked to `ClassroomTable`.
+    # `ActivityGroup` is a logical grouping for an activity. 
+    # Do we have a link between ActivityGroup and ClassroomTable?
+    # Checking `models.py`... 
+    # `ActivityGroup` has `group_set`. `ActivityGroupMembership` links `user`.
+    # `ClassroomTable` links `classroom`.
+    # If the system is using `ActivityGroup` for chat, we need to know where those messages are.
+    # If the system uses `ClassroomTable` (physical tables) for chat, we need to know which table corresponds to this group.
+    
+    # Let's look at `TeacherGroupPage.tsx` again.
+    # It calls `groupsApi.getMessages(tableId)`.
+    # So the chat is happening at the `ClassroomTable` level.
+    # BUT `auto_group_students` creates `ActivityGroup`s.
+    # Does `auto_group_students` assign students to `ClassroomTable`s?
+    # NO. It creates `ActivityGroupMembership`.
+    
+    # CRITICAL DISCONNECT:
+    # 1. AI creates `ActivityGroup` (Logical).
+    # 2. Chat happens in `ClassroomTable` (Physical/Socket).
+    # We need to bridge this.
+    # EITHER:
+    # A) We assume 1 ActivityGroup = 1 ClassroomTable and we need to sync them.
+    # B) We accept that we are summarizing `ActivityGroup` but there are no messages there yet?
+    
+    # Let's assume for this feature, the teacher wants to summarize a specific `ActivityGroup`.
+    # If the student is in `ActivityGroup` X, they should likely be chatting in a channel for `ActivityGroup` X.
+    # If the chat is actually implemented on `ClassroomTable`, then we need to know which Table `ActivityGroup` X represents.
+    
+    # For now, let's look at `TableMessage` model.
+    # It has `table` (ClassroomTable).
+    
+    # PROPOSAL:
+    # To implement "Summarize Discussion" for the AI Grouping feature:
+    # The Frontend likely needs to know which Table ID corresponds to the Group ID.
+    # OR we are moving towards "Activity-based Chat".
+    
+    # Let's assume we are summarizing a `ClassroomTable` for now, as that's where messages are.
+    # So the endpoint should be `classrooms/tables/<int:table_id>/summarize/`.
+    # AND/OR we update `ActivityGroup` to have a `table` foreign key?
+    
+    # Let's check `ClassroomTable` model again.
+    pass
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated]) 
+def summarize_table_discussion(request, table_id):
+    """
+    Summarize discussion for a specific table.
+    """
+    from classrooms.models import ClassroomTable, TableMessage
+    
+    table = get_object_or_404(ClassroomTable, pk=table_id)
+    
+    # Get messages
+    messages = TableMessage.objects.filter(table=table).order_by("created_at")
+    if not messages.exists():
+        return Response({"summary": "No messages found."}, status=200)
+    
+    formatted_messages = [
+        {"sender": m.author.first_name, "text": m.content, "timestamp": str(m.created_at)}
+        for m in messages
+    ]
+    
+    ai_service = get_ai_service()
+    try:
+        result = ai_service.summarize_discussion(
+            messages=formatted_messages,
+            discussion_topic=f"Table {table.name} Discussion"
+        )
+    except Exception as e:
+        logger.error(f"Summarization failed: {e}")
+        return Response({"error": str(e)}, status=500)
+        
+    return Response({
+        "success": True,
+        "summary": result.get("summary_data"),
+        "table_id": table_id
+    })

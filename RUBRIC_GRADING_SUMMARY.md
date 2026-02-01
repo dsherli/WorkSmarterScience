@@ -231,7 +231,7 @@ OPENAI_API_KEY=sk-proj-...
 # Or Azure OpenAI
 AZURE_OPENAI_API_KEY=...
 AZURE_OPENAI_ENDPOINT=https://....openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 ```
 
@@ -326,7 +326,7 @@ def grade_submission(self, request, pk=None):
 - Cache rubric evaluations for identical questions
 - Rate limit submissions per student
 - Monitor OpenAI API usage
-- Consider cheaper models for drafts (gpt-3.5-turbo)
+- Consider cheaper models for drafts (gpt-5-mini)
 
 ### 4. Security
 - Validate all input data

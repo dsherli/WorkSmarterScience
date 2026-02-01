@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
                 ('activity_id', models.IntegerField(blank=True, null=True)),
                 ('prompt', models.TextField()),
                 ('response', models.TextField()),
-                ('model_used', models.CharField(default='gpt-4', max_length=100)),
+                ('model_used', models.CharField(default='gpt-5', max_length=100)),
                 ('tokens_used', models.IntegerField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),

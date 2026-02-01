@@ -10,7 +10,7 @@ class GradingSession(models.Model):
     activity_id = models.IntegerField(null=True, blank=True)
     prompt = models.TextField()
     response = models.TextField()
-    model_used = models.CharField(max_length=100, default="gpt-4")
+    model_used = models.CharField(max_length=100, default="gpt-5")
     tokens_used = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     

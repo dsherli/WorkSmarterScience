@@ -57,7 +57,7 @@ OPENAI_API_KEY=sk-proj-...
 # Or Azure OpenAI
 # AZURE_OPENAI_API_KEY=your-azure-key
 # AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-# AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+# AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5
 # AZURE_OPENAI_API_VERSION=2024-02-15-preview
 
 # Django settings

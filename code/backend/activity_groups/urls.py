@@ -26,6 +26,11 @@ urlpatterns = [
         name="generate-all-questions",
     ),
     path(
+        "assignments/<int:assignment_id>/auto-group/",
+        views.auto_group_students,
+        name="auto-group-students",
+    ),
+    path(
         "assignments/<int:assignment_id>/release-questions/",
         views.release_questions,
         name="release-questions",
@@ -36,6 +41,11 @@ urlpatterns = [
         "groups/<int:group_id>/generate-questions/",
         views.generate_group_questions,
         name="generate-group-questions",
+    ),
+    path(
+        "tables/<int:table_id>/summarize/",
+        views.summarize_table_discussion,
+        name="summarize-table-discussion",
     ),
     
     # Prompt editing endpoint (teacher only)

@@ -19,6 +19,13 @@ except ImportError:
     OPENAI_AVAILABLE = False
     logger.warning("OpenAI package not installed. AI grading will be unavailable.")
 
+# Import new Agents
+try:
+    from agents.grading_agent import GradingAgent
+    from agents.feedback_agent import FeedbackAgent
+except ImportError:
+    logger.warning("Could not import Agents. Make sure they are in the python path.")
+
 
 class AIService:
     """
@@ -41,8 +48,8 @@ class AIService:
         # Check for Azure OpenAI first (takes precedence)
         azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
         azure_key = os.environ.get("AZURE_OPENAI_API_KEY")
-        azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4")
-        azure_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+        azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-5")
+        azure_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
 
         if azure_endpoint and azure_key:
             try:
@@ -79,7 +86,7 @@ class AIService:
         if openai_key:
             try:
                 self._client = OpenAI(api_key=openai_key)
-                self._model = os.environ.get("OPENAI_MODEL", "gpt-4")
+                self._model = os.environ.get("OPENAI_MODEL", "gpt-5")
                 self._service_type = "OpenAI"
                 logger.info(f"AI Service initialized with OpenAI (model: {self._model})")
                 return
@@ -157,36 +164,94 @@ class AIService:
         Returns:
             dict with 'evaluation' (JSON string), 'model', 'tokens_used'
         """
-        system_prompt = """You are an expert educational assessor for K-12 science education.
-Your task is to evaluate student work fairly and provide constructive feedback.
-Always respond with a valid JSON object containing:
-{
-  "score": <number 0-100>,
-  "strengths": ["list of things done well"],
-  "improvements": ["list of areas to improve"],
-  "feedback": "constructive feedback paragraph for the student"
-}"""
-
-        user_message = f"Question: {question}\n\nStudent Answer: {student_answer}"
+        # Instantiate Agents
+        grading_agent = GradingAgent(self._client, self._model)
+        feedback_agent = FeedbackAgent(self._client, self._model)
         
-        if rubric:
-            user_message += f"\n\nGrading Criteria/Rubric:\n{rubric}"
-        if context:
-            user_message += f"\n\nAdditional Context:\n{context}"
-
-        result = self.chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.3,
-        )
-
-        return {
-            "evaluation": result["content"],
-            "model": result["model"],
-            "tokens_used": result["tokens_used"],
+        # 1. quantitative grading
+        grading_ctx = {
+            "question_text": question,
+            "student_answer": student_answer,
+            "rubric_criteria": rubric or "No rubric provided", 
+            "max_score": 100
         }
+        g_res = grading_agent.run(grading_ctx)
+        grade_data = g_res.get("grading_result", {})
+        
+        # 2. qualitative feedback
+        feedback_ctx = {
+            "question_text": question,
+            "student_answer": student_answer,
+            "grading_result": grade_data,
+            "activity_context": context or ""
+        }
+        f_res = feedback_agent.run(feedback_ctx)
+        feedback_data = f_res.get("feedback_result", {})
+        
+        # Merge results to match expected output format of legacy code
+        # Expected: score, strengths, improvements, feedback
+        combined_result = {
+            "score": grade_data.get("total_score", 0),
+            "strengths": feedback_data.get("strengths", []),
+            "improvements": feedback_data.get("improvements", []),
+            "feedback": feedback_data.get("feedback_text", "No feedback generated.")
+        }
+        
+        return {
+            "evaluation": json.dumps(combined_result),
+            "model": self._model,
+            "tokens_used": g_res.get("tokens_used", 0) + f_res.get("tokens_used", 0)
+        }
+
+    def generate_student_groups(
+        self,
+        student_data: list[dict],
+        activity_context: str,
+        strategy: str = "heterogeneous",
+        group_size: int = 4
+    ) -> dict:
+        """
+        Group students using the Multi-Agent System.
+        """
+        if not self.is_configured():
+            raise RuntimeError("AI service not configured")
+            
+        try:
+            from agents.coordinator import AgentCoordinator
+            coordinator = AgentCoordinator(self._client, self._model)
+            return coordinator.generate_student_groups(
+                student_data=student_data,
+                activity_context=activity_context,
+                strategy=strategy,
+                group_size=group_size
+            )
+        except Exception as e:
+            logger.error(f"AI Grouping failed: {e}")
+            raise e
+
+    def summarize_discussion(
+        self,
+        messages: list[dict],
+        discussion_topic: str = "",
+        discussion_questions: list[str] = []
+    ) -> dict:
+        """
+        Summarize discussion messages using agents.
+        """
+        if not self.is_configured():
+            raise RuntimeError("AI service not configured")
+            
+        try:
+            from agents.coordinator import AgentCoordinator
+            coordinator = AgentCoordinator(self._client, self._model)
+            return coordinator.summarize_discussion(
+                messages=messages,
+                discussion_topic=discussion_topic,
+                discussion_questions=discussion_questions
+            )
+        except Exception as e:
+            logger.error(f"AI Summarization failed: {e}")
+            raise e
 
     def grade_with_rubric(
         self,
@@ -215,73 +280,49 @@ Always respond with a valid JSON object containing:
             for level in levels:
                 criteria_text += f"  - {level.get('name', 'Level')}: {level.get('description', '')}\n"
 
-        system_prompt = f"""You are an expert K-12 science educator grading student work.
-Use the provided rubric to evaluate the student's response.
-Maximum score: {max_score}
-
-Respond with a valid JSON object:
-{{
-  "total_score": <number>,
-  "criteria_scores": [
-    {{
-      "criterion_index": <0-based index>,
-      "criterion_title": "<title>",
-      "level_achieved": "<Proficient/Developing/Beginning>",
-      "points": <number>,
-      "feedback": "<specific feedback for this criterion>"
-    }}
-  ],
-  "overall_feedback": "<comprehensive feedback for the student>",
-  "strengths": ["list of strengths"],
-  "improvements": ["areas for improvement"]
-}}"""
-
-        user_message = f"""Question: {question_text}
-
-Student Answer: {student_answer}
-
-Rubric Criteria:
-{criteria_text}"""
-
-        result = self.chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.3,
-        )
-
-        try:
-            parsed = json.loads(result["content"])
-        except json.JSONDecodeError:
-            # Try to extract JSON from response
-            content = result["content"]
-            start = content.find("{")
-            end = content.rfind("}") + 1
-            if start >= 0 and end > start:
-                try:
-                    parsed = json.loads(content[start:end])
-                except json.JSONDecodeError:
-                    parsed = {
-                        "total_score": 0,
-                        "criteria_scores": [],
-                        "overall_feedback": content,
-                        "strengths": [],
-                        "improvements": ["Unable to parse structured response"],
-                    }
-            else:
-                parsed = {
-                    "total_score": 0,
-                    "criteria_scores": [],
-                    "overall_feedback": content,
-                    "strengths": [],
-                    "improvements": ["Unable to parse structured response"],
-                }
+        # Prepare rubric text context (kept for backward compat in context, but Agent handles it better if passed structs)
+        # Assuming Agents are flexible, but let's pass the text version to be safe as per GradingAgent design
+        
+        # Instantiate Agents
+        grading_agent = GradingAgent(self._client, self._model)
+        feedback_agent = FeedbackAgent(self._client, self._model)
+        
+        # 1. Grading
+        grading_ctx = {
+            "question_text": question_text,
+            "student_answer": student_answer,
+            "rubric_criteria": criteria_text, # Passing the pre-formatted text
+            "max_score": max_score
+        }
+        g_res = grading_agent.run(grading_ctx)
+        grade_data = g_res.get("grading_result", {})
+        
+        # 2. Feedback (Optional here since GradingAgent returns detailed breakdown, but we might want overall summary)
+        # grade_with_rubric expects detailed criteria scores.
+        # GradingAgent already returns criteria_scores. 
+        # We need "overall_feedback", "strengths", "improvements"
+        
+        feedback_ctx = {
+            "question_text": question_text,
+            "student_answer": student_answer,
+            "grading_result": grade_data,
+            "activity_context": "Rubric Grading"
+        }
+        f_res = feedback_agent.run(feedback_ctx)
+        feedback_data = f_res.get("feedback_result", {})
+        
+        parsed = {
+            "total_score": grade_data.get("total_score", 0),
+            "criteria_scores": grade_data.get("criteria_scores", []),
+            "overall_feedback": feedback_data.get("feedback_text", ""),
+            "strengths": feedback_data.get("strengths", []),
+            "improvements": feedback_data.get("improvements", [])
+        }
 
         return {
             **parsed,
-            "model": result["model"],
-            "tokens_used": result["tokens_used"],
+            "model": self._model,
+            "tokens_used": g_res.get("tokens_used", 0) + f_res.get("tokens_used", 0),
         }
 
     def generate_feedback(
@@ -333,6 +374,8 @@ Be encouraging while maintaining accuracy."""
         """
         Generate AI-powered follow-up discussion questions for a student group
         based on their collective responses to an assessment.
+        
+        Refactored to use Multi-Agent System (Analysis -> Strategy -> Generation).
 
         Args:
             activity_metadata: Dict with activity info (title, task, questions, etc.)
@@ -343,127 +386,39 @@ Be encouraging while maintaining accuracy."""
         Returns:
             dict with 'questions' (list of question dicts), 'summary', 'model', 'tokens_used'
         """
-        # Build the rubric context
-        rubric_text = ""
-        if rubric_criteria:
-            rubric_text = "GRADING RUBRIC:\n"
-            for criterion in rubric_criteria:
-                rubric_text += f"- {criterion.get('name', 'Criterion')}: {criterion.get('description', '')}\n"
-                if 'levels' in criterion:
-                    for level in criterion['levels']:
-                        rubric_text += f"  • {level.get('name', 'Level')}: {level.get('description', '')}\n"
+        if not self.is_configured():
+            raise RuntimeError("AI service not configured")
 
-        # Build student responses context
-        responses_text = "STUDENT RESPONSES FROM THE GROUP:\n\n"
-        for i, response in enumerate(student_responses, 1):
-            responses_text += f"Student {i}:\n"
-            for answer in response.get('answers', []):
-                responses_text += f"  Question: {answer.get('question_text', 'N/A')}\n"
-                responses_text += f"  Answer: {answer.get('student_answer', 'No answer provided')}\n"
-                if answer.get('ai_feedback'):
-                    responses_text += f"  AI Feedback: {answer.get('ai_feedback')}\n"
-                responses_text += "\n"
-
-        system_prompt = """You are an expert K-12 science educator specializing in facilitating meaningful group discussions.
-Your task is to analyze student responses to an assessment and generate thoughtful follow-up discussion questions
-that will help students:
-1. Deepen their understanding of concepts they may have misunderstood
-2. Explore connections between ideas they demonstrated understanding of
-3. Apply their learning to new contexts
-4. Reflect on their thinking process
-
-Generate questions that are:
-- Open-ended and promote discussion (not yes/no questions)
-- Appropriate for the grade level and topic
-- Building on patterns you observe in the group's responses
-- Encouraging collaborative sense-making
-
-You MUST respond with a valid JSON object in this exact format:
-{
-  "summary": "Brief synthesis of common themes, strengths, and misconceptions observed in the group's responses",
-  "questions": [
-    {
-      "prompt_order": 1,
-      "prompt_text": "The actual discussion question text",
-      "prompt_type": "follow_up",
-      "rationale": "Why this question was chosen based on student responses"
-    }
-  ]
-}
-
-Valid prompt_type values are: "follow_up", "reflection", "extension", "check_in"
-- follow_up: Addresses gaps or misconceptions
-- reflection: Asks students to think about their thinking
-- extension: Pushes understanding to new contexts
-- check_in: Ensures baseline understanding before moving on"""
-
-        user_message = f"""ASSESSMENT INFORMATION:
-Title: {activity_metadata.get('title', 'Science Activity')}
-Task Description: {activity_metadata.get('task', 'Complete the assessment')}
-
-ASSESSMENT QUESTIONS:
-{chr(10).join(f"Q{i+1}: {q}" for i, q in enumerate(activity_metadata.get('questions', [])))}
-
-{rubric_text}
-
-{responses_text}
-
-Based on the above assessment and student responses, generate exactly {num_questions} discussion questions
-that will help this group of students deepen their understanding through collaborative discussion.
-
-Include a mix of question types:
-- At least 1 follow_up question addressing common gaps
-- At least 1 reflection question  
-- At least 1 extension question
-- Optionally a check_in question if foundational concepts seem unclear"""
-
-        result = self.chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.7,
-            max_tokens=2000,
-        )
-
-        # Parse the response
         try:
-            parsed = json.loads(result["content"])
-        except json.JSONDecodeError:
-            # Try to extract JSON from response
-            content = result["content"]
-            start = content.find("{")
-            end = content.rfind("}") + 1
-            if start >= 0 and end > start:
-                try:
-                    parsed = json.loads(content[start:end])
-                except json.JSONDecodeError:
-                    parsed = {
-                        "summary": "Unable to parse AI response",
-                        "questions": [{
-                            "prompt_order": 1,
-                            "prompt_text": "What did you learn from this activity? Discuss with your group.",
-                            "prompt_type": "reflection",
-                            "rationale": "Fallback question due to parsing error"
-                        }]
-                    }
-            else:
-                parsed = {
-                    "summary": "Unable to parse AI response",
-                    "questions": [{
-                        "prompt_order": 1,
-                        "prompt_text": "What did you learn from this activity? Discuss with your group.",
-                        "prompt_type": "reflection",
-                        "rationale": "Fallback question due to parsing error"
-                    }]
-                }
-
-        return {
-            "summary": parsed.get("summary", ""),
-            "questions": parsed.get("questions", []),
-            "model": result["model"],
-            "tokens_used": result["tokens_used"],
-        }
+            from agents.coordinator import AgentCoordinator
+            
+            coordinator = AgentCoordinator(self._client, self._model)
+            result = coordinator.generate_discussion_questions(
+                activity_metadata=activity_metadata,
+                student_responses=student_responses,
+                rubric_criteria=rubric_criteria,
+                num_questions=num_questions
+            )
+            return result
+            
+        except ImportError:
+            logger.error("Failed to import AgentCoordinator. Falling back to simple generation.")
+            # Fallback logic could go here, or just re-raise
+            raise
+        except Exception as e:
+            logger.error(f"Multi-Agent Generation failed: {e}")
+            # Fallback to simple error response
+            return {
+                "summary": "Error in AI generation",
+                "questions": [{
+                    "prompt_order": 1,
+                    "prompt_text": "We encountered an error generating questions. Please discuss your answers with your group.",
+                    "prompt_type": "reflection",
+                    "rationale": f"Error: {str(e)}"
+                }],
+                "model": self._model,
+                "tokens_used": 0,
+            }
 
 
 # Singleton instance

@@ -116,11 +116,20 @@ export default function TeacherGroupPage() {
     const [numQuestions, setNumQuestions] = useState<string>("4");
     const [generateResults, setGenerateResults] = useState<GenerateAllQuestionsResult | null>(null);
 
+    // Auto Grouping State
+    const [groupingStrategy, setGroupingStrategy] = useState<string>("heterogeneous");
+    const [isGrouping, setIsGrouping] = useState(false);
+
     // Prompt editing state
     const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
     const [editingPromptText, setEditingPromptText] = useState<string>("");
+
     const [editingPromptType, setEditingPromptType] = useState<string>("");
     const [savingPrompt, setSavingPrompt] = useState(false);
+
+    // Summarization State
+    const [isSummarizing, setIsSummarizing] = useState(false);
+    const [summaryResult, setSummaryResult] = useState<any>(null);
 
     // Fetch classrooms on mount
     useEffect(() => {
@@ -226,6 +235,29 @@ export default function TeacherGroupPage() {
         return () => clearInterval(interval);
     }, [selectedTable]);
 
+    // Clear summary when table changes
+    useEffect(() => {
+        setSummaryResult(null);
+    }, [selectedTable]);
+
+    const handleSummarizeDiscussion = async () => {
+        if (!selectedTable) return;
+        setIsSummarizing(true);
+        setSummaryResult(null);
+        try {
+            const result = await groupsApi.summarizeTableDiscussion(selectedTable.id);
+            if (result.success) {
+                setSummaryResult(result.summary);
+                toast.success("Discussion summarized!");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to summarize discussion");
+        } finally {
+            setIsSummarizing(false);
+        }
+    };
+
 
     useEffect(() => {
         setTables([]);
@@ -269,6 +301,31 @@ export default function TeacherGroupPage() {
             })
             .finally(() => setAiLoading(false));
     }, [selectedAssignment]);
+
+    // Handle auto-grouping
+    const handleAutoGroup = async () => {
+        if (!selectedAssignment) return;
+        if (!confirm("This will replace all existing groups for this assignment. Are you sure?")) return;
+
+        setIsGrouping(true);
+        try {
+            const result = await groupPromptsApi.autoGroupStudents(
+                selectedAssignment,
+                groupingStrategy,
+                4 // Default, could be parameterized
+            );
+            toast.success(`Created ${result.groups_created} groups`);
+
+            // Refresh groups
+            const data = await groupPromptsApi.getTeacherGroups(selectedAssignment);
+            setAiGroups(data);
+        } catch (error: any) {
+            console.error(error);
+            toast.error("Failed to auto-group students");
+        } finally {
+            setIsGrouping(false);
+        }
+    };
 
     // Handle generating questions for all groups
     const handleGenerateAllQuestions = async () => {
@@ -371,12 +428,12 @@ export default function TeacherGroupPage() {
     };
 
     // Check if any groups have released questions
-    const hasReleasedQuestions = aiGroups.some(group => 
+    const hasReleasedQuestions = aiGroups.some(group =>
         group.ai_runs?.some(run => run.released_at !== null)
     );
-    
+
     // Check if any groups have unreleased questions ready
-    const hasUnreleasedQuestions = aiGroups.some(group => 
+    const hasUnreleasedQuestions = aiGroups.some(group =>
         group.ai_runs?.some(run => run.prompts.length > 0 && run.released_at === null)
     );
 
@@ -683,6 +740,45 @@ export default function TeacherGroupPage() {
 
                                     {selectedAssignment && (
                                         <>
+                                            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="w-4 h-4 text-slate-700" />
+                                                    <h3 className="font-medium text-slate-900">Student Grouping</h3>
+                                                </div>
+
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1">
+                                                        <Label className="text-xs mb-1 block text-slate-500">Strategy</Label>
+                                                        <Select value={groupingStrategy} onValueChange={setGroupingStrategy}>
+                                                            <SelectTrigger className="h-8">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="heterogeneous">Mixed Levels (Peer Tutoring)</SelectItem>
+                                                                <SelectItem value="homogeneous">Similar Levels (focused)</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="flex items-end">
+                                                        <Button
+                                                            onClick={handleAutoGroup}
+                                                            disabled={isGrouping}
+                                                            size="sm"
+                                                            className="h-8 bg-slate-800 hover:bg-slate-700 text-white"
+                                                        >
+                                                            {isGrouping ? (
+                                                                <><Loader2 className="w-3 h-3 mr-2 animate-spin" />Grouping...</>
+                                                            ) : (
+                                                                <><Brain className="w-3 h-3 mr-2" />Auto-Group with AI</>
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="border-t border-slate-100 my-2"></div>
+
+
                                             {/* Number of Questions + Generate Button */}
                                             <div className="flex items-center gap-4 flex-wrap">
                                                 <Label>Questions per group:</Label>
@@ -714,13 +810,13 @@ export default function TeacherGroupPage() {
                                                 <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                                                     <div className="flex-1">
                                                         <p className="text-sm font-medium text-blue-800">
-                                                            {hasReleasedQuestions 
+                                                            {hasReleasedQuestions
                                                                 ? "Questions are visible to students"
                                                                 : "Questions are ready but not visible to students yet"
                                                             }
                                                         </p>
                                                         <p className="text-xs text-blue-600 mt-0.5">
-                                                            {hasReleasedQuestions 
+                                                            {hasReleasedQuestions
                                                                 ? "Students can now see and discuss the AI-generated questions"
                                                                 : "Click 'Release to Students' to make questions visible"
                                                             }
@@ -775,7 +871,7 @@ export default function TeacherGroupPage() {
                                                         const latestRun = hasPrompts ? group.ai_runs[0] : null;
                                                         const isReleased = latestRun?.released_at !== null && latestRun?.released_at !== undefined;
                                                         const isExpanded = expandedGroups.has(group.id);
-                                                        
+
                                                         const toggleExpanded = () => {
                                                             setExpandedGroups(prev => {
                                                                 const next = new Set(prev);
@@ -787,17 +883,17 @@ export default function TeacherGroupPage() {
                                                                 return next;
                                                             });
                                                         };
-                                                        
+
                                                         return (
                                                             <Card key={group.id} className="p-3">
-                                                                <div 
+                                                                <div
                                                                     className="flex items-center justify-between cursor-pointer"
                                                                     onClick={hasPrompts ? toggleExpanded : undefined}
                                                                 >
                                                                     <div className="flex items-center gap-2">
                                                                         {hasPrompts && (
-                                                                            isExpanded ? 
-                                                                                <ChevronUp className="w-4 h-4 text-gray-500" /> : 
+                                                                            isExpanded ?
+                                                                                <ChevronUp className="w-4 h-4 text-gray-500" /> :
                                                                                 <ChevronDown className="w-4 h-4 text-gray-500" />
                                                                         )}
                                                                         <Users className="w-4 h-4 text-gray-500" />
@@ -828,7 +924,7 @@ export default function TeacherGroupPage() {
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                
+
                                                                 {/* Expanded content with AI Analysis and Questions */}
                                                                 {latestRun && isExpanded && (
                                                                     <div className="mt-4 space-y-4 border-t pt-4">
@@ -844,7 +940,7 @@ export default function TeacherGroupPage() {
                                                                                 </p>
                                                                             </div>
                                                                         </div>
-                                                                        
+
                                                                         {/* Generated Questions Section */}
                                                                         <div className="space-y-2">
                                                                             <div className="flex items-center justify-between">
@@ -959,7 +1055,7 @@ export default function TeacherGroupPage() {
                                                                         </div>
                                                                     </div>
                                                                 )}
-                                                                
+
                                                                 {/* Collapsed preview */}
                                                                 {latestRun && !isExpanded && (
                                                                     <div className="mt-2 pl-6 text-sm text-gray-500">
@@ -1176,7 +1272,38 @@ export default function TeacherGroupPage() {
                                 </ScrollArea>
                             </div>
 
-                            <div className="p-4 border-t bg-gray-50">
+
+
+                            <div className="p-4 border-t bg-gray-50 space-y-3">
+                                <Button
+                                    className="w-full bg-indigo-600 hover:bg-indigo-700 h-8"
+                                    size="sm"
+                                    onClick={handleSummarizeDiscussion}
+                                    disabled={isSummarizing || selectedTable.messages.length === 0}
+                                >
+                                    {isSummarizing ? (
+                                        <><Loader2 className="w-3 h-3 mr-2 animate-spin" />Summarizing...</>
+                                    ) : (
+                                        <><Brain className="w-3 h-3 mr-2" />Summarize Discussion</>
+                                    )}
+                                </Button>
+
+                                {summaryResult && (
+                                    <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm space-y-2 text-xs">
+                                        <h4 className="font-semibold text-indigo-900 flex items-center gap-1">
+                                            <Sparkles className="w-3 h-3" /> AI Summary
+                                        </h4>
+                                        <div className="text-gray-700 leading-relaxed">
+                                            {typeof summaryResult.summary === 'string' ? summaryResult.summary : summaryResult.summary}
+                                        </div>
+                                        {summaryResult.participation_analysis && (
+                                            <div className="text-gray-500 italic border-l-2 border-indigo-200 pl-2">
+                                                {summaryResult.participation_analysis}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 <Label className="text-xs text-gray-600 mb-2 block">Discussion Preview</Label>
                                 <div className="h-32 overflow-y-auto space-y-2 mb-2 bg-white p-2 rounded border text-xs text-gray-500">
                                     {selectedTable.messages.length > 0 ? selectedTable.messages.slice(-3).map(m => (
@@ -1260,7 +1387,7 @@ export default function TeacherGroupPage() {
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
 

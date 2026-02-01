@@ -118,47 +118,54 @@ export const groupPromptsApi = {
     // Get current prompts for student's group in an assignment
     getStudentPrompts: (assignmentId: string | number): Promise<GroupAIPrompt[]> =>
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/prompts/`),
-    
+
     // Get student's group info including members and prompts
     getStudentGroupInfo: (assignmentId: string | number): Promise<StudentGroupInfo> =>
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/my-group/`),
-    
+
     // Get all groups with prompts for teacher view
     getTeacherGroups: (assignmentId: string | number): Promise<GroupInfo[]> =>
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/groups/`),
-    
+
     // Generate discussion questions for a specific group (teacher only)
     generateGroupQuestions: (groupId: string | number, numQuestions: number = 4): Promise<GenerateQuestionsResult> =>
         fetchWithAuth(`/activity-groups/groups/${groupId}/generate-questions/`, {
             method: "POST",
             body: JSON.stringify({ num_questions: numQuestions }),
         }),
-    
+
     // Generate discussion questions for all groups in an assignment (teacher only)
     generateAllGroupQuestions: (assignmentId: string | number, numQuestions: number = 4): Promise<GenerateAllQuestionsResult> =>
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/generate-all/`, {
             method: "POST",
             body: JSON.stringify({ num_questions: numQuestions }),
         }),
-    
+
     // Release or un-release questions to students (teacher only)
     releaseQuestions: (assignmentId: string | number, release: boolean = true): Promise<ReleaseQuestionsResult> =>
         fetchWithAuth(`/activity-groups/assignments/${assignmentId}/release-questions/`, {
             method: "POST",
             body: JSON.stringify({ release }),
         }),
-    
+
     // Update a specific prompt (teacher only)
     updatePrompt: (promptId: string | number, data: { prompt_text?: string; prompt_type?: string }): Promise<UpdatePromptResult> =>
         fetchWithAuth(`/activity-groups/prompts/${promptId}/`, {
             method: "PATCH",
             body: JSON.stringify(data),
         }),
-    
+
     // Delete a specific prompt (teacher only)
     deletePrompt: (promptId: string | number): Promise<null> =>
         fetchWithAuth(`/activity-groups/prompts/${promptId}/`, {
             method: "DELETE",
+        }),
+
+    // Auto-group students using AI
+    autoGroupStudents: (assignmentId: string | number, strategy: string = 'heterogeneous', groupSize: number = 4): Promise<{ success: boolean; groups_created: number; strategy: string }> =>
+        fetchWithAuth(`/activity-groups/assignments/${assignmentId}/auto-group/`, {
+            method: "POST",
+            body: JSON.stringify({ strategy, group_size: groupSize }),
         }),
 };
 
@@ -212,5 +219,11 @@ export const groupsApi = {
         fetchWithAuth(`/classrooms/tables/${tableId}/messages/`, {
             method: "POST",
             body: JSON.stringify({ content: text }),
+        }),
+
+    // Summarize discussion
+    summarizeTableDiscussion: (tableId: string | number): Promise<{ success: boolean; summary: any; table_id: number }> =>
+        fetchWithAuth(`/activity-groups/tables/${tableId}/summarize/`, {
+            method: "POST",
         }),
 };

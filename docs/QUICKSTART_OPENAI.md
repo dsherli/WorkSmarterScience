@@ -27,12 +27,12 @@ Open `.env` in your editor and add your OpenAI key:
 ```env
 # For standard OpenAI (most common)
 OPENAI_API_KEY=sk-your-actual-key-here
-OPENAI_MODEL=gpt-4
+OPENAI_MODEL=gpt-5
 
 # OR for Azure OpenAI
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-azure-key
-AZURE_OPENAI_DEPLOYMENT=gpt-4
+AZURE_OPENAI_DEPLOYMENT=gpt-5
 ```
 
 **Important:** Only set ONE of these (OpenAI OR Azure). Azure takes precedence if both are set.
@@ -93,7 +93,7 @@ Expected response (if configured correctly):
 ```json
 {
   "configured": true,
-  "model": "gpt-4",
+  "model": "gpt-5",
   "service": "OpenAI"
 }
 ```
@@ -262,7 +262,7 @@ Before deploying to production:
 - [ ] Update `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS`
 - [ ] Add rate limiting (django-ratelimit or nginx)
 - [ ] Set up monitoring/alerts for API costs
-- [ ] Consider using GPT-3.5-turbo for cost savings
+- [ ] Consider using gpt-5-mini for cost savings
 - [ ] Implement caching for common queries
 - [ ] Add proper error tracking (Sentry, etc.)
 

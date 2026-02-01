@@ -37,7 +37,7 @@ Create a `.env` file in the project root (copy from `.env.example`):
 **Option A: Standard OpenAI**
 ```env
 OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4
+OPENAI_MODEL=gpt-5
 ```
 
 Get your API key from: https://platform.openai.com/api-keys
@@ -47,7 +47,7 @@ Get your API key from: https://platform.openai.com/api-keys
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-azure-key-here
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
-AZURE_OPENAI_DEPLOYMENT=gpt-4
+AZURE_OPENAI_DEPLOYMENT=gpt-5
 ```
 
 Get credentials from Azure Portal → Azure OpenAI Service
@@ -93,7 +93,7 @@ Returns AI service configuration status:
 ```json
 {
   "configured": true,
-  "model": "gpt-4",
+  "model": "gpt-5",
   "service": "OpenAI"
 }
 ```
@@ -118,7 +118,7 @@ Response:
 ```json
 {
   "evaluation": "JSON string with score, strengths, improvements, feedback",
-  "model": "gpt-4",
+  "model": "gpt-5",
   "tokens_used": 456
 }
 ```
@@ -144,7 +144,7 @@ Response:
 ```json
 {
   "content": "The water cycle is...",
-  "model": "gpt-4",
+  "model": "gpt-5",
   "tokens_used": 234,
   "finish_reason": "stop"
 }
@@ -168,7 +168,7 @@ Response:
 ```json
 {
   "feedback": "Cellular respiration is...",
-  "model": "gpt-4",
+  "model": "gpt-5",
   "tokens_used": 189
 }
 ```
@@ -347,7 +347,7 @@ Tips to reduce costs:
 - Use `temperature=0.3` for grading (more deterministic, fewer tokens)
 - Set `max_tokens` limits on responses
 - Cache common evaluations
-- Use GPT-3.5-turbo for simpler tasks
+- Use gpt-5-mini for simpler tasks
 
 ## Next Steps
 

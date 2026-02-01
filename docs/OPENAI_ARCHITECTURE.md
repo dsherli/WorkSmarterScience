@@ -77,7 +77,7 @@
    └─ Calls OpenAI chat.completions.create()
 
 7. OpenAI/Azure API
-   └─ Processes request with GPT-4
+   └─ Processes request with GPT-5
    └─ Returns evaluation with score and feedback
 
 8. Django View
@@ -237,14 +237,14 @@
    └─ AZURE_OPENAI_API_KEY set?
          │
          ├─ YES → Use Azure OpenAI
-         │        └─ Model: AZURE_OPENAI_DEPLOYMENT (default: gpt-4)
+         │        └─ Model: AZURE_OPENAI_DEPLOYMENT (default: gpt-5)
          │
          └─ NO → Check for standard OpenAI
                   │
                   ├─ OPENAI_API_KEY set?
                   │     │
                   │     ├─ YES → Use OpenAI
-                  │     │        └─ Model: OPENAI_MODEL (default: gpt-4)
+                  │     │        └─ Model: OPENAI_MODEL (default: gpt-5)
                   │     │
                   │     └─ NO → AI service not configured
                   │              └─ Return 503 Service Unavailable
@@ -337,7 +337,7 @@ Table: grading_gradingsession
 │ activity_id  │ INTEGER        │ Related activity (nullable)      │
 │ prompt       │ TEXT           │ User's input/question            │
 │ response     │ TEXT           │ AI's output                      │
-│ model_used   │ VARCHAR(100)   │ gpt-4, gpt-3.5-turbo, etc.      │
+│ model_used   │ VARCHAR(100)   │ gpt-5     │
 │ tokens_used  │ INTEGER        │ Total tokens consumed            │
 │ created_at   │ DATETIME       │ Timestamp                        │
 └──────────────┴────────────────┴──────────────────────────────────┘
