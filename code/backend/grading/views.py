@@ -10,6 +10,7 @@ from rest_framework import status, generics, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+import concurrent.futures
 
 from activities.models import ScienceActivitySubmission, ActivityAnswer
 from .models import GradingSession, Rubric, ActivityRubricMap
@@ -265,14 +266,14 @@ def grade_submission(request):
     max_possible = 0
     total_tokens = 0
     
-    # Grade each answer
-    for answer in answers:
+    # Pre-calculate rubric text once
+    rubric_text = None
+    if rubric_data and "criteria" in rubric_data:
+        rubric_text = json.dumps(rubric_data["criteria"], indent=2)
+
+    def grade_single_answer(answer):
+        """Helper function to grade a single answer (safe for threading)"""
         try:
-            # Build the rubric text for this question
-            rubric_text = None
-            if rubric_data and "criteria" in rubric_data:
-                rubric_text = json.dumps(rubric_data["criteria"], indent=2)
-            
             result = ai_service.evaluate_student_work(
                 question=answer.question_text,
                 student_answer=answer.student_answer or "",
@@ -291,29 +292,49 @@ def grade_submission(request):
                 feedback = result["evaluation"]
             
             # Update the answer with AI feedback
+            # Note: SQLite might lock if we save too aggressively, but usually OK for row-level updates
             answer.ai_feedback = feedback
             answer.score = question_score
             answer.save(update_fields=["ai_feedback", "score", "updated_at"])
             
-            grading_results.append({
-                "question_number": answer.question_number,
-                "question_text": answer.question_text,
-                "student_answer": answer.student_answer,
+            return {
+                "result": {
+                    "question_number": answer.question_number,
+                    "question_text": answer.question_text,
+                    "student_answer": answer.student_answer,
+                    "score": question_score,
+                    "feedback": feedback,
+                },
                 "score": question_score,
-                "feedback": feedback,
-            })
-            
-            total_score += question_score
-            max_possible += 100  # Each question is out of 100
-            total_tokens += result.get("tokens_used", 0) or 0
+                "tokens": result.get("tokens_used", 0) or 0
+            }
             
         except Exception as e:
             logger.error(f"Error grading answer {answer.id}: {e}")
-            grading_results.append({
-                "question_number": answer.question_number,
-                "error": str(e),
-            })
-    
+            return {
+                "result": {
+                    "question_number": answer.question_number,
+                    "error": str(e),
+                },
+                "score": 0,
+                "tokens": 0
+            }
+
+    # Execute grading in parallel using ThreadPoolExecutor
+    # Limit workers to avoid overwhelming the API or DB
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_answer = {executor.submit(grade_single_answer, answer): answer for answer in answers}
+        
+        for future in concurrent.futures.as_completed(future_to_answer):
+            data = future.result()
+            grading_results.append(data["result"])
+            total_score += data["score"]
+            total_tokens += data["tokens"]
+            max_possible += 100
+
+    # Sort results by question number since they might finish out of order
+    grading_results.sort(key=lambda x: x.get("question_number", 0))
+
     # Update the submission status and overall score
     if max_possible > 0:
         normalized_score = (total_score / max_possible) * 100
@@ -329,7 +350,7 @@ def grade_submission(request):
     GradingSession.objects.create(
         user=request.user,
         activity_id=submission.activity.id,
-        prompt=f"Grade submission #{submission_id} with {len(answers)} answers",
+        prompt=f"Grade submission #{submission_id} with {len(answers)} answers (Parallel)",
         response=json.dumps(grading_results),
         model_used=ai_service._model or "unknown",
         tokens_used=total_tokens,

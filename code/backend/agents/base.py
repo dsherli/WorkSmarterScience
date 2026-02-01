@@ -67,6 +67,8 @@ class BaseAgent:
             return {
                 "content": content,
                 "tokens_used": response.usage.total_tokens if response.usage else 0,
+                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+                "completion_tokens": response.usage.completion_tokens if response.usage else 0,
                 "finish_reason": choice.finish_reason,
             }
             

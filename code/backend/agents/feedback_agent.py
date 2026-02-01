@@ -49,11 +49,13 @@ Student Answer: {student_answer}
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.6, # Slightly higher for more natural, varied language
+            temperature=1.0, # Slightly higher for more natural, varied language
             json_output=True
         )
 
         return {
             "feedback_result": result["content"],
-            "tokens_used": result["tokens_used"]
+            "tokens_used": result["tokens_used"],
+            "prompt_tokens": result.get("prompt_tokens", 0),
+            "completion_tokens": result.get("completion_tokens", 0)
         }

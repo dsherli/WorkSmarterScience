@@ -23,6 +23,7 @@ except ImportError:
 try:
     from agents.grading_agent import GradingAgent
     from agents.feedback_agent import FeedbackAgent
+    from agents.combined_agent import CombinedGradingAgent
 except ImportError:
     logger.warning("Could not import Agents. Make sure they are in the python path.")
 
@@ -35,7 +36,8 @@ class AIService:
 
     def __init__(self):
         self._client = None
-        self._model = None
+        self._model_reasoning = None  # Primary (High IQ)
+        self._model_fast = None       # Secondary (Fast/Cheap)
         self._service_type = None
         self._initialize()
 
@@ -49,6 +51,9 @@ class AIService:
         azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
         azure_key = os.environ.get("AZURE_OPENAI_API_KEY")
         azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-5")
+        # New: Fast model deployment
+        azure_deployment_fast = os.environ.get("AZURE_OPENAI_DEPLOYMENT_FAST", "gpt-5-mini")
+        
         azure_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
 
         if azure_endpoint and azure_key:
@@ -59,9 +64,10 @@ class AIService:
                     api_version=azure_version,
                     http_client=None,  # Avoid proxy issues
                 )
-                self._model = azure_deployment
+                self._model_reasoning = azure_deployment
+                self._model_fast = azure_deployment_fast
                 self._service_type = "Azure OpenAI"
-                logger.info(f"AI Service initialized with Azure OpenAI (deployment: {azure_deployment})")
+                logger.info(f"AI Service initialized with Azure OpenAI (Reasoning: {azure_deployment}, Fast: {azure_deployment_fast})")
                 return
             except TypeError as te:
                 # Fallback for older versions that don't support http_client
@@ -72,9 +78,10 @@ class AIService:
                         api_key=azure_key,
                         api_version=azure_version,
                     )
-                    self._model = azure_deployment
+                    self._model_reasoning = azure_deployment
+                    self._model_fast = azure_deployment_fast
                     self._service_type = "Azure OpenAI"
-                    logger.info(f"AI Service initialized with Azure OpenAI (deployment: {azure_deployment})")
+                    logger.info(f"AI Service initialized with Azure OpenAI (Reasoning: {azure_deployment}, Fast: {azure_deployment_fast})")
                     return
                 except Exception as e2:
                     logger.error(f"Failed to initialize Azure OpenAI: {e2}")
@@ -86,9 +93,10 @@ class AIService:
         if openai_key:
             try:
                 self._client = OpenAI(api_key=openai_key)
-                self._model = os.environ.get("OPENAI_MODEL", "gpt-5")
+                self._model_reasoning = os.environ.get("OPENAI_MODEL", "gpt-5")
+                self._model_fast = os.environ.get("OPENAI_MODEL_FAST", "gpt-5-mini")
                 self._service_type = "OpenAI"
-                logger.info(f"AI Service initialized with OpenAI (model: {self._model})")
+                logger.info(f"AI Service initialized with OpenAI (Reasoning: {self._model_reasoning}, Fast: {self._model_fast})")
                 return
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI: {e}")
@@ -103,7 +111,8 @@ class AIService:
         """Return configuration information for health checks."""
         return {
             "configured": self.is_configured(),
-            "model": self._model,
+            "model_reasoning": self._model_reasoning,
+            "model_fast": self._model_fast,
             "service": self._service_type,
         }
 
@@ -112,6 +121,7 @@ class AIService:
         messages: list[dict],
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
+        model_type: str = "reasoning",
     ) -> dict:
         """
         Send a chat completion request to the AI model.
@@ -120,15 +130,19 @@ class AIService:
             messages: List of message dicts with 'role' and 'content'
             temperature: Sampling temperature (0-1)
             max_tokens: Maximum tokens in response
+            model_type: "reasoning" (default) or "fast"
 
         Returns:
             dict with 'content', 'model', 'tokens_used', 'finish_reason'
         """
         if not self.is_configured():
             raise RuntimeError("AI service not configured")
+        
+        # Select model based on type
+        selected_model = self._model_fast if model_type == "fast" else self._model_reasoning
 
         kwargs = {
-            "model": self._model,
+            "model": selected_model,
             "messages": messages,
             "temperature": temperature,
         }
@@ -140,7 +154,7 @@ class AIService:
 
         return {
             "content": choice.message.content,
-            "model": self._model,
+            "model": selected_model,
             "tokens_used": response.usage.total_tokens if response.usage else None,
             "finish_reason": choice.finish_reason,
         }
@@ -154,44 +168,34 @@ class AIService:
     ) -> dict:
         """
         Evaluate a student's answer using AI.
-
-        Args:
-            question: The question the student answered
-            student_answer: The student's response
-            rubric: Optional grading criteria
-            context: Optional additional context
-
-        Returns:
-            dict with 'evaluation' (JSON string), 'model', 'tokens_used'
         """
-        # Instantiate Agents
-        grading_agent = GradingAgent(self._client, self._model)
-        feedback_agent = FeedbackAgent(self._client, self._model)
+        # Instantiate Agents with Reasoning Model
+        # Using CombinedAgent for lower latency
+        combined_agent = CombinedGradingAgent(self._client, self._model_reasoning)
         
-        # 1. quantitative grading
-        grading_ctx = {
+        # Prepare context
+        ctx = {
             "question_text": question,
             "student_answer": student_answer,
             "rubric_criteria": rubric or "No rubric provided", 
-            "max_score": 100
-        }
-        g_res = grading_agent.run(grading_ctx)
-        grade_data = g_res.get("grading_result", {})
-        
-        # 2. qualitative feedback
-        feedback_ctx = {
-            "question_text": question,
-            "student_answer": student_answer,
-            "grading_result": grade_data,
+            "max_score": 100,
             "activity_context": context or ""
         }
-        f_res = feedback_agent.run(feedback_ctx)
-        feedback_data = f_res.get("feedback_result", {})
+        
+        res = combined_agent.run(ctx)
+        combined_data = res.get("combined_result", {})
+        
+        # Identify if combined_data is dict or string (Agent should return dict if json_output=True works)
+        # But base.py might return string if not parsed. checking base.py logic... 
+        # base.py parses if json_output=True. So it should be dict.
+        
+        grading_data = combined_data.get("grading", {})
+        feedback_data = combined_data.get("feedback", {})
         
         # Merge results to match expected output format of legacy code
         # Expected: score, strengths, improvements, feedback
         combined_result = {
-            "score": grade_data.get("total_score", 0),
+            "score": grading_data.get("total_score", 0),
             "strengths": feedback_data.get("strengths", []),
             "improvements": feedback_data.get("improvements", []),
             "feedback": feedback_data.get("feedback_text", "No feedback generated.")
@@ -199,8 +203,10 @@ class AIService:
         
         return {
             "evaluation": json.dumps(combined_result),
-            "model": self._model,
-            "tokens_used": g_res.get("tokens_used", 0) + f_res.get("tokens_used", 0)
+            "model": self._model_reasoning,
+            "tokens_used": res.get("tokens_used", 0),
+            "prompt_tokens": res.get("prompt_tokens", 0),
+            "completion_tokens": res.get("completion_tokens", 0)
         }
 
     def generate_student_groups(
@@ -218,7 +224,8 @@ class AIService:
             
         try:
             from agents.coordinator import AgentCoordinator
-            coordinator = AgentCoordinator(self._client, self._model)
+            # Grouping is complex -> Reasoning model
+            coordinator = AgentCoordinator(self._client, self._model_reasoning)
             return coordinator.generate_student_groups(
                 student_data=student_data,
                 activity_context=activity_context,
@@ -243,7 +250,8 @@ class AIService:
             
         try:
             from agents.coordinator import AgentCoordinator
-            coordinator = AgentCoordinator(self._client, self._model)
+            # Summarization is a good candidate for FAST model
+            coordinator = AgentCoordinator(self._client, self._model_fast)
             return coordinator.summarize_discussion(
                 messages=messages,
                 discussion_topic=discussion_topic,
@@ -283,9 +291,9 @@ class AIService:
         # Prepare rubric text context (kept for backward compat in context, but Agent handles it better if passed structs)
         # Assuming Agents are flexible, but let's pass the text version to be safe as per GradingAgent design
         
-        # Instantiate Agents
-        grading_agent = GradingAgent(self._client, self._model)
-        feedback_agent = FeedbackAgent(self._client, self._model)
+        # Instantiate Agents with Reasoning Model
+        grading_agent = GradingAgent(self._client, self._model_reasoning)
+        feedback_agent = FeedbackAgent(self._client, self._model_reasoning)
         
         # 1. Grading
         grading_ctx = {
@@ -321,7 +329,7 @@ class AIService:
 
         return {
             **parsed,
-            "model": self._model,
+            "model": self._model_reasoning,
             "tokens_used": g_res.get("tokens_used", 0) + f_res.get("tokens_used", 0),
         }
 
@@ -356,6 +364,7 @@ Be encouraging while maintaining accuracy."""
                 {"role": "user", "content": user_message},
             ],
             temperature=temperature,
+            model_type="reasoning", # Feedback quality is important
         )
 
         return {
@@ -392,7 +401,8 @@ Be encouraging while maintaining accuracy."""
         try:
             from agents.coordinator import AgentCoordinator
             
-            coordinator = AgentCoordinator(self._client, self._model)
+            # Discussion generation is complex -> Reasoning model
+            coordinator = AgentCoordinator(self._client, self._model_reasoning)
             result = coordinator.generate_discussion_questions(
                 activity_metadata=activity_metadata,
                 student_responses=student_responses,
@@ -416,7 +426,7 @@ Be encouraging while maintaining accuracy."""
                     "prompt_type": "reflection",
                     "rationale": f"Error: {str(e)}"
                 }],
-                "model": self._model,
+                "model": self._model_reasoning,
                 "tokens_used": 0,
             }
 
