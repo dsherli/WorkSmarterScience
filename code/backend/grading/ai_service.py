@@ -144,8 +144,10 @@ class AIService:
         kwargs = {
             "model": selected_model,
             "messages": messages,
-            "temperature": temperature,
         }
+        
+        # Temperature strictly removed
+
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
 
@@ -165,13 +167,15 @@ class AIService:
         student_answer: str,
         rubric: Optional[str] = None,
         context: Optional[str] = None,
+        model_override: Optional[str] = None,
     ) -> dict:
         """
         Evaluate a student's answer using AI.
         """
-        # Instantiate Agents with Reasoning Model
+        # Instantiate Agents with Reasoning Model or Override
         # Using CombinedAgent for lower latency
-        combined_agent = CombinedGradingAgent(self._client, self._model_reasoning)
+        target_model = model_override if model_override else self._model_reasoning
+        combined_agent = CombinedGradingAgent(self._client, target_model)
         
         # Prepare context
         ctx = {
@@ -203,7 +207,7 @@ class AIService:
         
         return {
             "evaluation": json.dumps(combined_result),
-            "model": self._model_reasoning,
+            "model": target_model,
             "tokens_used": res.get("tokens_used", 0),
             "prompt_tokens": res.get("prompt_tokens", 0),
             "completion_tokens": res.get("completion_tokens", 0)

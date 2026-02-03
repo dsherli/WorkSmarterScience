@@ -34,8 +34,10 @@ class BaseAgent:
         kwargs = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
         }
+        
+        # Temperature strictly removed as per user request for gpt-5-mini usage
+        
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
             

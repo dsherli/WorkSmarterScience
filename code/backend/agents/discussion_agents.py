@@ -34,7 +34,7 @@ Student Responses:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.3,
+            # Temperature removed
             json_output=True
         )
         
@@ -100,7 +100,7 @@ Rubric Criteria:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.5,
+            # Temperature removed
             json_output=True
         )
 
@@ -150,7 +150,7 @@ Question Plan:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.7,
+            # Temperature removed
             json_output=True
         )
 

@@ -36,10 +36,10 @@ class GroupingAgent(BaseAgent):
         if strategy == "homogeneous":
             strategy_desc = "Group students with SIMILAR levels of understanding or similar misconceptions together. This is good for targeted intervention or debates between opposing views."
         else: # heterogeneous
-            strategy_desc = "Group students with MIXED levels of understanding. Mix high-performing students with those struggling. This is good for peer tutoring."
+            strategy_desc = "Group students to MAXIMIZE COGNITIVE CONFLICT. Pair students who have conflicting answers, opposing misconceptions, or different lines of reasoning. The goal is to spark argumentation where they must persuade each other."
 
-        system_prompt = f"""You are an expert classroom manager and pedagogical planner.
-Your task is to group students into {target_num_groups} working groups based on their responses.
+        system_prompt = f"""You are an expert classroom manager and pedagogical planner focused on Equitable Science Learning.
+Your task is to group students into {target_num_groups} working groups to facilitate productive argumentation.
 
 Strategy: {strategy}
 {strategy_desc}
@@ -47,7 +47,8 @@ Strategy: {strategy}
 Constraints:
 - Every student MUST be assigned to exactly one group.
 - Groups should be roughly equal in size.
-- Explain the reasoning for each group composition briefly.
+- For 'heterogeneous' groups, explicitly mention the "Cognitive Conflict" (conflicting views) in the reasoning.
+- Encourage students to find differences in their thinking and persuade each other using evidence.
 
 Output strictly as JSON:
 {{
@@ -55,7 +56,7 @@ Output strictly as JSON:
     {{
       "group_id": 1,
       "student_ids": [101, 102, ...],
-      "reasoning": "These students all showed..."
+      "reasoning": "Student A thinks X while Student B thinks Y. This conflict will drive argumentation..."
     }},
     ...
   ]
@@ -81,7 +82,7 @@ Generate {target_num_groups} groups."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.4, # Slightly higher than 0 for some creative clustering but still structured
+            # Temperature removed for gpt-5-mini
             json_output=True
         )
 
