@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { fetchWithAuth, groupPromptsApi, type GroupAIPrompt, type StudentGroupInfo } from "../api/groups";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { ScrollArea } from "../components/ui/scroll-area";
@@ -22,6 +23,7 @@ import {
     Brain,
     Target,
     HelpCircle,
+    PenLine,
 } from "lucide-react";
 
 // Types
@@ -120,6 +122,11 @@ export default function StudentGroupDiscussionPage() {
     const [messages, setMessages] = useState<Map<number, DiscussionMessage[]>>(new Map());
     const [newMessage, setNewMessage] = useState("");
     const [completedPrompts, setCompletedPrompts] = useState<Set<number>>(new Set());
+    
+    // Student response state - stores responses per prompt
+    const [studentResponses, setStudentResponses] = useState<Map<number, string>>(new Map());
+    const [savedResponses, setSavedResponses] = useState<Set<number>>(new Set());
+    const [isSaving, setIsSaving] = useState(false);
     
     // Refresh state
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -252,6 +259,51 @@ export default function StudentGroupDiscussionPage() {
             }
             return updated;
         });
+    };
+
+    // Handle updating student response text
+    const handleResponseChange = (promptId: number, text: string) => {
+        setStudentResponses((prev) => {
+            const updated = new Map(prev);
+            updated.set(promptId, text);
+            return updated;
+        });
+        // Remove from saved if user is editing again
+        setSavedResponses((prev) => {
+            const updated = new Set(prev);
+            updated.delete(promptId);
+            return updated;
+        });
+    };
+
+    // Handle saving student response
+    const handleSaveResponse = async (promptId: number) => {
+        const response = studentResponses.get(promptId);
+        if (!response?.trim()) return;
+
+        setIsSaving(true);
+        try {
+            // TODO: Send to backend when API is ready
+            // await groupPromptsApi.saveStudentResponse(promptId, response);
+            
+            // For now, just mark as saved locally
+            setSavedResponses((prev) => {
+                const updated = new Set(prev);
+                updated.add(promptId);
+                return updated;
+            });
+            
+            // Auto-mark as discussed when saved
+            setCompletedPrompts((prev) => {
+                const updated = new Set(prev);
+                updated.add(promptId);
+                return updated;
+            });
+        } catch (err) {
+            console.error("Failed to save response:", err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     // Get prompt config
@@ -518,6 +570,53 @@ export default function StudentGroupDiscussionPage() {
                                                                     <li>• Ask clarifying questions</li>
                                                                 </ul>
                                                             </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Student Response Text Box */}
+                                                    <div className="mt-6">
+                                                        <div className="flex items-center gap-2 mb-3">
+                                                            <PenLine className="w-5 h-5 text-teal-600" />
+                                                            <h3 className="text-base font-medium text-gray-800">Group Response</h3>
+                                                            {savedResponses.has(prompt.id) && (
+                                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                    Saved
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <Textarea
+                                                            placeholder="Write your group thoughts here..."
+                                                            value={studentResponses.get(prompt.id) || ""}
+                                                            onChange={(e) => handleResponseChange(prompt.id, e.target.value)}
+                                                            className="min-h-[150px] text-base resize-y border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+                                                        />
+                                                        <div className="flex items-center justify-between mt-3">
+                                                            <p className="text-sm text-gray-500">
+                                                                {(studentResponses.get(prompt.id) || "").length} characters
+                                                            </p>
+                                                            <Button
+                                                                onClick={() => handleSaveResponse(prompt.id)}
+                                                                disabled={isSaving || !studentResponses.get(prompt.id)?.trim()}
+                                                                className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600"
+                                                            >
+                                                                {isSaving ? (
+                                                                    <>
+                                                                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                                                        Saving...
+                                                                    </>
+                                                                ) : savedResponses.has(prompt.id) ? (
+                                                                    <>
+                                                                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                                                                        Update Response
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Send className="w-4 h-4 mr-2" />
+                                                                        Save Response
+                                                                    </>
+                                                                )}
+                                                            </Button>
                                                         </div>
                                                     </div>
                                                 </CardContent>
