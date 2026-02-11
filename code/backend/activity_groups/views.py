@@ -215,12 +215,19 @@ def create_groups_from_tables(classroom_activity, user):
     )
     
     # Get all tables in this classroom that have students assigned
+    # Use a subquery to find tables that have at least one enrollment
     tables_with_students = ClassroomTable.objects.filter(
-        classroom=classroom,
-        students__isnull=False  # Has enrollments assigned
-    ).distinct().prefetch_related("students__student")
+        classroom=classroom
+    ).filter(
+        pk__in=Enrollment.objects.filter(
+            assigned_table__isnull=False
+        ).values('assigned_table_id')
+    ).distinct()
+    
+    logger.debug(f"Found {tables_with_students.count()} tables with students in classroom {classroom.id}")
     
     created_count = 0
+    updated_count = 0
     
     with transaction.atomic():
         for table in tables_with_students:
@@ -238,6 +245,9 @@ def create_groups_from_tables(classroom_activity, user):
             
             if group_created:
                 created_count += 1
+                logger.debug(f"Created group '{table.name}' for table {table.id}")
+            else:
+                updated_count += 1
             
             # Sync memberships - add students who are assigned to this table
             for enrollment in enrollments:
@@ -247,6 +257,7 @@ def create_groups_from_tables(classroom_activity, user):
                     user=enrollment.student,
                 )
     
+    logger.info(f"create_groups_from_tables: created {created_count}, updated {updated_count} groups for classroom_activity {classroom_activity.id}")
     return group_set, created_count
 
 
@@ -413,14 +424,19 @@ def generate_all_group_questions(request, assignment_id):
     if created_count > 0:
         logger.info(f"Auto-created {created_count} activity groups from classroom tables for classroom_activity {assignment_id}")
     
-    # Get all groups
-    groups = ActivityGroup.objects.filter(group_set=group_set, archived_at__isnull=True)
+    # Get all groups with prefetched relations for efficiency
+    groups = list(ActivityGroup.objects.filter(
+        group_set=group_set, 
+        archived_at__isnull=True
+    ).select_related("group_set__classroom_activity__classroom"))
     
-    if not groups.exists():
+    if not groups:
         return Response(
             {"error": "No active groups found. Make sure students are assigned to tables in the classroom."},
             status=status.HTTP_404_NOT_FOUND
         )
+    
+    logger.info(f"Generating questions for {len(groups)} groups: {[g.label for g in groups]}")
     
     results = []
     num_questions = request.data.get("num_questions", 4)
