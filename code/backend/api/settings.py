@@ -32,7 +32,10 @@ SECRET_KEY = os.getenv(
 )
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "backend"]
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,backend").split(
+    ","
+)
+
 
 # Installed apps
 INSTALLED_APPS = [
@@ -150,10 +153,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",  # Vite dev server
 ]
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-]
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://localhost:5174"
+).split(",")
 CORS_ALLOW_HEADERS = [
     "content-type",
     "x-csrftoken",
