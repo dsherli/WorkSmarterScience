@@ -32,13 +32,14 @@ Here are links to the issues that we completed in this sprint:
 * [Added teacher side UI and AI infrastructure updates with migration to allow releasing questions](https://github.com/dsherli/WorkSmarterScience/commit/3f9286f) — Teachers can generate, edit, and release AI discussion questions
 * [Added textbox for students](https://github.com/dsherli/WorkSmarterScience/commit/70c94e2) — Students can respond to group discussion prompts
 * [Added trusted origins for deployment](https://github.com/dsherli/WorkSmarterScience/commit/85ef497) — Deployment configuration updates
+* AIED 2026 Paper Submission — finalized and our paper has been submitted
 
 ## Incomplete Issues/User Stories
 Here are links to issues we worked on but did not complete in this sprint:
 
 * Multi-agent discussion system — We began exploring heterogeneous and cognitive conflict approaches for richer AI-facilitated discussions, but the feature is still in an experimental branch and needs further testing.
 * Full production deployment — Trusted origins were configured, but the complete deployment pipeline to a cloud platform has not been finalized due to ongoing infrastructure decisions.
-* AIED 2026 Paper Submission — Work contributed toward the paper, but the submission process is still in progress.
+
 
 ## Code Files for Review
 Please review the following code files, which were actively developed during this sprint, for quality:
@@ -59,6 +60,7 @@ Here's what went well:
 * Group discussion system was built across both frontend and backend with AI question generation and teacher quality control in a short timeframe.
 * Announcements feature was scoped, built, and integrated cleanly into the existing classroom page.
 * Team explored advanced multi-agent AI architectures (heterogeneous + cognitive conflict) for future improvements.
+* Finalized the AIED 2026 paper submission
 
 Here's what we'd like to improve:
 * Several features (AI Assistant, AI Insight, Student Management) are partially complete and need dedicated focus to finish.
@@ -72,4 +74,4 @@ Here are changes we plan to implement in the next sprint:
 * Polish AI Assistant and AI Insight features for production readiness.
 * Expand student management with bulk operations and role-based access controls.
 * Add automated tests for the grading and group discussion APIs.
-* Finalize the AIED 2026 paper submission.
+.

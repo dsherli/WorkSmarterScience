@@ -110,25 +110,43 @@ Follow these steps to set up and run the Virtual Teaching Assistant project:
 
 ## Functionality
 
-**Current Status: Project Foundation Complete**
+**Current Status: Core Features Implemented (Sprint 4)**
 
-The project currently provides a solid foundation for the Virtual Teaching Assistant with the following implemented features:
+The platform now delivers a fully functional learning environment with AI-powered features for both teachers and students.
 
+### Teacher Features
+- **Classroom Management** — Create, edit, and delete classrooms; share join codes; view enrolled students
+- **Activity Library** — Browse and assign NGSS-aligned science activities to classrooms
+- **AI-Powered Grading** — Rubric-based automated grading with OpenAI integration; teachers can review, edit, and finalize AI-generated scores and feedback
+- **Rubric Builder** — Create, import, and map rubrics to activities for consistent evaluation
+- **Announcements** — Create, edit, and delete announcements with file attachments within classrooms
+- **Group Discussion System** — Organize students into table groups, generate AI-driven discussion questions, review/edit questions for quality control, and release them to students
+- **AI Assistant** — Contextual AI-powered chat for teacher guidance on the dashboard
+- **AI Insight** — AI-generated analytics and observations on student performance
+- **Student Management** — View enrolled students, monitor roster status, and manage classroom membership
 
-### Available Now
-- **Backend API Health Check**: `GET /api/health/` returns server status
-- **Django Admin Interface**: Available at `http://localhost:8000/admin/` for database         management
-- **React Development Environment**: Hot-reloading frontend with TypeScript and Tailwind CSS
-- **CORS Configuration**: Backend configured to accept requests from frontend development server
+### Student Features
+- **Dashboard** — View assigned activities, class membership, and progress summaries
+- **Class Join Flow** — Join classrooms via invite codes
+- **Activity Submission** — Preview full task context with reference media and submit responses
+- **Group Discussion** — View AI-generated discussion prompts and respond within assigned groups
+- **Notification System** — Badge indicators for new activity and announcements
+
+### Infrastructure
+- **JWT Authentication** — Role-aware login and registration for teachers and students
+- **REST API** — Django REST Framework backend with full CRUD endpoints
+- **Docker Support** — Docker Compose stack for the full development environment
+- **Django Admin Interface** — Available at `http://localhost:8000/admin/` for database management
+- **Hot-Reloading Frontend** — React + TypeScript + Tailwind CSS with Vite dev server
 
 
 ## Known Problems
 
-- **AI system** - not integrated into teacher dashboard
-- **UI** - Teacher dashboard and final functionality needs to be completed
-- **UI and functionaly** - The Teacher and student portions need to get connected
-- **AI system** - needs guardrails for safety checks
-- **teacher** - add ways to group students
+- **Multi-agent discussion system** — Experimental branch exploring heterogeneous and cognitive conflict approaches; not yet merged into main
+- **Deployment** — Trusted origins configured, but full production deployment pipeline is not yet finalized
+- **AI guardrails** — AI grading and assistant features need additional safety checks and input validation before production release
+- **Test coverage** — Automated tests for the grading and group discussion APIs are minimal and need expansion
+- **AI Insight & AI Assistant** — Partially implemented; need further polish and deeper integration with grading data
 
 
 ## Contributing
@@ -145,9 +163,15 @@ TODO: Leave the steps below if you want others to contribute to your project.
 
 [Docs folder](docs)
 
-[Frontend README](code\frontend\README.md)
+[Sprint 4 Report](docs/Reports/sprint4_report.md)
+
+[Frontend README](code/frontend/README.md)
 
 [Backend Requirements](code/backend/requirements.txt)
+
+[OpenAI Integration Guide](docs/OPENAI_INTEGRATION.md)
+
+[Architecture Overview](docs/ARCHITECTURE.md)
 
 ## License
 [View License](LICENSE.txt)
